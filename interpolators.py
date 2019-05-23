@@ -1,11 +1,12 @@
 import tensorflow as tf
+import numpy as np
 
 from tensorflow.python.keras.layers import Layer
 
 
 class InterpBilinear(Layer):
     def __init__(self, size, *args, old_size=None, **kwargs):
-        super(InterpBilinear, self).__init__(*args, **kwargs)
+        super(InterpBilinear, self).__init__()
 
         self.size = size
         self.channels = size[-1]
@@ -24,7 +25,7 @@ class InterpBilinear(Layer):
 
 class InterpBicubic(Layer):
     def __init__(self, size, *args, old_size=None, **kwargs):
-        super(InterpBicubic, self).__init__(*args, **kwargs)
+        super(InterpBicubic, self).__init__()
 
         self.size = size
         self.channels = size[-1]
@@ -43,7 +44,7 @@ class InterpBicubic(Layer):
 
 class InterpNearestUpscale(Layer):
     def __init__(self, *args, scale=2, channels=1, **kwargs):
-        super(InterpNearestUpscale, self).__init__(*args, **kwargs)
+        super(InterpNearestUpscale, self).__init__()
 
         assert isinstance(scale, int) and scale >= 1
 
@@ -70,7 +71,7 @@ class InterpNearestUpscale(Layer):
 
 class InterpNearestDownscale(Layer):
     def __init__(self, *args, scale=2, channels=1, **kwargs):
-        super(InterpNearestDownscale, self).__init__(*args, **kwargs)
+        super(InterpNearestDownscale, self).__init__()
 
         assert isinstance(scale, int) and scale >= 1
 
