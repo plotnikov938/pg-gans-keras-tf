@@ -2,8 +2,6 @@ import xml.etree.ElementTree as ET
 import numpy as np
 import pandas as pd
 import glob
-# from PIL import Image, ImageFilter, ImageDraw
-import matplotlib.pyplot as plt
 import tensorflow as tf
 
 imgs_folder = 'images/'
@@ -23,48 +21,6 @@ def parse_rec(root):
             yield sub_child
 
 
-def blur_cut_edges(img):
-    # Paste image on white background with offset to center
-    size = img.size
-    background = Image.new('L', new_size, 255)
-    offset = ((new_size[0] - size[0]) // 2, (new_size[1] - size[1]) // 2)
-    background.paste(img, offset)
-
-    # Blur params
-    RADIUS = max(offset) // 2
-    diam = RADIUS
-
-    # Create blur mask
-    mask = Image.new('L', img.size, 0)
-    draw = ImageDraw.Draw(mask)
-
-    x1, y1 = size
-    x0, y0 = 0, 0
-    dec_1 = 1 if offset[0] else 0
-    dec_2 = 1 if offset[1] else 0
-    for d in range(diam + RADIUS):
-        x1, y1 = x1 - dec_1, y1 - dec_2
-        alpha = 255 if d < RADIUS else int(255 * (diam + RADIUS - d) / diam)
-        draw.rectangle([x0, y0, x1, y1], outline=alpha)
-        x0, y0 = x0 + dec_1, y0 + dec_2
-
-    # Blur the image and paste blurred edges according to the mask
-    blur = img.filter(ImageFilter.GaussianBlur(RADIUS))
-    img.paste(blur, mask=mask)
-
-    return img
-
-
-def make_square(border):
-    size = border[2:] - border[:2]
-    gap = (size[0] - size[1]) // 2
-
-    if gap > 0:
-        border[1::2] -= [gap, -gap]
-    elif gap < 0:
-        border[::2] += [gap, -gap]
-
-
 # TODO: test as numpy
 def make_square_tf(border):
     size = border[:, 2:] - border[:, :2]
@@ -77,38 +33,6 @@ def make_square_tf(border):
     # border[gap > 0, ::2] += np.array([gap, -gap]).T[gap > 0]
 
     return border
-
-
-def image_preprocessing(filename, borders, size, convert="L"):
-    img = Image.open(folder + imgs_folder + filename)
-
-    # make_square(borders)
-    cropped_img = img.crop(borders)
-
-    converted_img = cropped_img.convert(convert)
-    converted_img = thumbnail(converted_img, size, Image.ANTIALIAS)
-
-    return converted_img
-
-    # plt.imshow(pix, cmap='gist_gray', clim=(0, 255))
-    # plt.colorbar()
-    # plt.show()
-
-
-def image_preprocessing_tf(filename, borders, size, convert="L"):
-    img = Image.open(folder + imgs_folder + filename)
-
-    make_square(borders)
-    cropped_img = img.crop(borders)
-
-    converted_img = cropped_img.convert(convert)
-    converted_img = thumbnail(converted_img, size, Image.ANTIALIAS)
-
-    # pix = np.array(converted_img)
-    #
-    # plt.imshow(pix, cmap='gist_gray', clim=(0, 255))
-    # plt.colorbar()
-    # plt.show()
 
 
 def encode_breed(breeds):
@@ -124,11 +48,11 @@ def encode_breed(breeds):
     return breeds.astype(np.int32)
 
 
-def parse_annotations(path_to_ants='annotations/'):
+def parse_annotations(path_to_annts='annotations/'):
     """Parses the images annotation files in xml format.
 
       Arguments:
-          path_to_ants: path where annotations is stored
+          path_to_annts: path where annotations is stored
 
       Returns:
           Pandas Dataframe object: `(num_imgs, num_data_fields)`.
@@ -136,7 +60,7 @@ def parse_annotations(path_to_ants='annotations/'):
 
     # Open annotations
     annotations = []
-    for filename in glob.iglob(path_to_ants + '**/*.xml', recursive=True):
+    for filename in glob.iglob(path_to_annts + '**/*.xml', recursive=True):
         # Parse
         tree = ET.parse(filename)
         root = tree.getroot()
@@ -204,7 +128,7 @@ def augmentation(img, size, crop_frac=0.7, flip_v=True, flip_h=True, rot90=True,
 
         # Random cropping with shifting
         if crop_frac:
-            frac = tf.random_uniform([], minval=crop_frac)
+            frac = tf.random.uniform([], minval=crop_frac)
             img_shapes = tf.shape(img)
 
             try:
@@ -226,7 +150,7 @@ def augmentation(img, size, crop_frac=0.7, flip_v=True, flip_h=True, rot90=True,
 
         # Random rotation
         if rot90:
-            img = tf.image.rot90(img, tf.random_uniform(shape=[], minval=0, maxval=3, dtype=tf.int32))
+            img = tf.image.rot90(img, tf.random.uniform(shape=[], minval=0, maxval=3, dtype=tf.int32))
 
         # TODO: for discrim train set range from -1 to 1
         if contrast_min_max:
@@ -234,13 +158,13 @@ def augmentation(img, size, crop_frac=0.7, flip_v=True, flip_h=True, rot90=True,
 
         # Gaussian Noise
         if stddev_max:
-            stddev = tf.random_uniform(shape=(), maxval=stddev_max)
-            noise = tf.random_normal(shape=tf.shape(img), stddev=stddev)
+            stddev = tf.random.uniform(shape=(), maxval=stddev_max)
+            noise = tf.random.normal(shape=tf.shape(img), stddev=stddev)
             img += noise
 
         # Random_brightness
         if brightness_delta:
-            delta = tf.random_uniform(shape=(), minval=-brightness_delta, maxval=brightness_delta)
+            delta = tf.random.uniform(shape=(), minval=-brightness_delta, maxval=brightness_delta)
             img = tf.clip_by_value(img - delta, 0.0, 1.0)
 
         return tf.image.resize(img, size)
@@ -495,29 +419,58 @@ def load_data(folder, size, frac=1.0, split=0.3, equal_sets=True, resize=False, 
                            size))
 
 
-def resize_images_tf(images, size):
-    with tf.Session() as sess:
-        image_ph = tf.placeholder(tf.float32, (None, None, None, images.shape[-1]))
+# TODO: DONE: Arg sess, chunks, docs, new logic
+def resize_images_tf(images, size, chunks=None, sess=None):
+    """A function that resizes `images` to `size` using tensorflow bilinear interpolation.
 
-        img = tf.image.resize_bilinear(image_ph, size, align_corners=True)
+    Args:
+        images: A numpy array with shape (batch_size, height, width, channels).
+        size: A list of 'int' or a numpy array of type 'int' containing the new size of images in format(height, width).
+        chunks: An optional 'int'. Defaults to None.
+            If the input array `images` is to large to fit in the memory for processing in one go, you can split
+            the `images` into chunks, and than process each chunk separately.
+        sess: An optional tf.Session() object. Defaults to None.
+            If None, creates a new tf.Session() object inside the function.
+            Otherwise uses specified tf.Session() object.
 
-        return sess.run(img, feed_dict={image_ph: images})
+    Returns:
+        A numpy array of type `float32` containing images with the new size.
+    """
+
+    import tensorflow as tf
+    tf = tf.compat.v1
+
+    need_close = False if sess else True
+    sess = sess or tf.Session()
+    chunks = chunks or 1
+
+    # Split into chunks
+    new_images = []
+    ph = tf.placeholder(tf.float32, (None, None, None, None))
+    img = tf.image.resize_bilinear(ph, size, align_corners=True)
+    for image_chunk in np.array_split(images, chunks):
+        new_images.append(sess.run(img, {ph: image_chunk}))
+
+    if need_close:
+        sess.close()
+
+    return np.concatenate(new_images, axis=0)
 
 
 class Dataset:
     def __init__(self, *data):
-        self.data = data
-        self.data_aug = self.data[0].copy()
+        self.storage = data
+        self.data_aug = self.storage[0].copy()
 
         self.k = 2
-        self.cut_size = len(self.data[0])*2
+        self.cut_size = len(self.storage[0]) * 2
         self.buf_arr = np.arange(self.cut_size)
 
         self.batch_size = 1
         self.indexes = []
         self.repeat_times = -1
-        self.image_ph = None
-        self.img = None
+        self.samples_ph = None
+        self.sample = None
         self._aug_flag = None
         self._sfl_flag = None
 
@@ -537,7 +490,7 @@ class Dataset:
 
     def batch(self, batch_size):
         self.batch_size = batch_size
-        self.cut_size = len(self.data[0])*self.k // self.batch_size
+        self.cut_size = len(self.storage[0]) * self.k // self.batch_size
 
         return self
 
@@ -554,7 +507,7 @@ class Dataset:
 
         return self
 
-    def get_batch(self):
+    def __iter__(self):
         counter = 0
 
         while True:
@@ -562,29 +515,30 @@ class Dataset:
                 break
 
             if counter != 0:
-                # Augment data in the cache for each 'self.repeat' iteration if self.augment()
+                # Augment data in the cache for each `repeat` iteration if self.augment()
                 # was called after self.repeat()
                 if self.repeat_times == self._aug_flag:
                     self.augment()
 
-                # Shuffle data in the cache for each 'self.repeat' iteration if self.shuffle()
+                # Shuffle data in the cache for each `repeat` iteration if self.shuffle()
                 # was called after self.repeat()
                 if self.repeat_times == self._sfl_flag:
                     self.shuffle()
 
             if self._aug_flag is None:
+                # TODO: Done: ~Fixed empty_batch size, replace get_batch with `__iter__`
                 self.indexes = self.buf_arr[:self.cut_size // self.k * self.batch_size].reshape(
-                    [-1, self.batch_size])
+                    -1, self.batch_size)  # [-1, self.batch_size] if self.batch_size else (-1,)
 
                 for idxs in self.indexes:
-                    yield (arr[idxs] for arr in self.data)
+                    yield tuple(arr[idxs] for arr in self.storage)
             else:
                 self.indexes = self.buf_arr[:self.cut_size * self.batch_size].reshape(
-                    [-1, self.batch_size])
+                    -1, self.batch_size)
 
                 for idxs in self.indexes:
-                    yield (np.concatenate([self.data[0], self.data_aug], axis=0)[idxs],
-                           *(np.tile(arr, self.k)[idxs] for arr in self.data[1:]))
+                    yield tuple(np.concatenate([self.storage[0], self.data_aug], axis=0)[idxs],
+                                *(np.tile(arr, self.k)[idxs] for arr in self.storage[1:]))
 
             counter += 1
 
@@ -674,7 +628,7 @@ if __name__ == "__main__":
     import time
 
     start = time.time()
-    for a, b in load_data(folder, new_size, resize=True, channels=1, mode='dog').batch(32).shuffle().repeat(5).augment().get_batch():
+    for a, b in load_data(folder, new_size, resize=True, mode='dog').batch(32).shuffle().repeat(5).augment().get_batch():
         pass
         # for img in a:
         #     plt.imshow(np.squeeze(img), cmap='gray')
