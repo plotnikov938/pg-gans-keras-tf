@@ -466,6 +466,8 @@ class Dataset:
         self.sample = None
         self._aug_flag = None
         self._sfl_flag = None
+        self.batch_size = 1
+        self._batch_shape = ()
 
     def shuffle(self):
         # Used to determine the order of method calling during batching
