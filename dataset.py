@@ -544,9 +544,18 @@ class Dataset:
 
 
 class Buffer(Dataset):
-    """A simple circular buffer used to store previously generated data"""
+    """A simple circular buffer used to store previously generated data
 
-    # TODO: DONE! rewrote `__init__` so that it can handle with `size` and `dtype`
+    Args:
+        *shape: A tuples or lists of integer values with stored data shapes.
+        size (int, optional): A size of the buffer. Default to None.
+            If not specified, the outer dimention in the first `shape` tuple will be used as the `size`.
+        dtype (optional): A tuple or list of stored data dtypes. Default to `numpy.zeros`.
+            Specifies the dtype of stored data.
+        initializer (optional): A tuple or list of functions with the signature `(shape, dtype=None)`.            Specifies the dtype of data stored.
+            Initializers for an arrays with stored data.
+    """
+
     def __init__(self, *shape, size=None, dtype='float32', initializer=np.zeros):
 
         self.shape = shape
@@ -574,9 +583,19 @@ class Buffer(Dataset):
             *[init(shape=shape, dtype=dtype) for init, shape, dtype in zip(initializer, self.shape, self.dtype)])
         # super(Buffer, self).__init__(initializer(shape=shape, dtype=dtype))
 
-    # TODO: DONE! Added new classmethod
     @classmethod
     def from_data(cls, *data):
+        """An alternative constructor for the 'Buffer' object.
+
+        Allows to create buffer from already existing data.
+
+        Args:
+            *data: A tuples or lists of integer values with stored data.
+
+        Returns:
+            A 'Buffer' object.
+        """
+
         if any(isinstance(i, (list, tuple)) for i in data):
             data = data[0]
 
