@@ -1,6 +1,6 @@
 from tensorflow.python.keras.layers import Dense, Wrapper
 import tensorflow as tf
-import tensorflow.python.keras.backend as K
+from tensorflow.python.keras import backend as K
 
 
 def clip_value(a, a_min, a_max):
