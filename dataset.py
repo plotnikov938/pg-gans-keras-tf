@@ -1,9 +1,12 @@
 import glob
+import random
 
 import xml.etree.ElementTree as ET
 import numpy as np
 import pandas as pd
 import tensorflow as tf
+
+from utils import clip_value
 
 
 def parse_rec(root):
@@ -536,6 +539,114 @@ class Dataset:
 
         # Reset all the properties
         self._aug_flag, self._sfl_flag, self.repeat_times = None, None, -1
+
+
+class Buffer(Dataset):
+    """A simple circular buffer used to store previously generated data"""
+
+    # TODO: DONE! rewrote `__init__` so that it can handle with `size` and `dtype`
+    def __init__(self, *shape, size=None, dtype='float32', initializer=np.zeros):
+
+        self.shape = shape
+        self.size = size or shape[0][0]
+        self.dtype = dtype
+        if size:
+            self.shape = tuple((self.size, *shape) for shape in self.shape)
+
+        self.ptrs = np.arange(0, size, 1, dtype=np.int32)
+        self._len = 0
+
+        # Check if the `initializer` needs to be broadcasted to match the length of the `shape`
+        if not hasattr(initializer, '__iter__'):
+            initializer = (initializer,)
+        if any(isinstance(i, (list, tuple)) for i in self.shape) and len(initializer) == 1:
+            initializer = initializer * len(self.shape)
+
+        # Check if the `dtype` needs to be broadcasted to match the length of the `shape`
+        if not hasattr(dtype, '__iter__'):
+            self.dtype = (self.dtype,)
+        if any(isinstance(i, (list, tuple)) for i in self.shape) and len(self.dtype) == 1:
+            self.dtype = self.dtype * len(self.shape)
+
+        super(Buffer, self).__init__(
+            *[init(shape=shape, dtype=dtype) for init, shape, dtype in zip(initializer, self.shape, self.dtype)])
+        # super(Buffer, self).__init__(initializer(shape=shape, dtype=dtype))
+
+    # TODO: DONE! Added new classmethod
+    @classmethod
+    def from_data(cls, *data):
+        if any(isinstance(i, (list, tuple)) for i in data):
+            data = data[0]
+
+        buffer = cls(*(array.shape for array in data), dtype=tuple(array.dtype for array in data))
+        for buf, array in zip(buffer.storage, data):
+            buf[:] = array
+
+        return buffer
+
+    def store(self, *input_data):
+        """A function that allows to store the `input_data` into the circular buffer.
+
+        Args:
+            input_data (numpy.ndarray): A numpy array of the inputs data.
+
+        Raises:
+            AssertionError: If the shape of the `input_data` is not equal to the specified or
+                if the length of the `input_data` is less then or equal to the max buffer capacity.
+
+        Returns:
+            None
+
+        """
+
+        # Store the input data
+        input_data_len = input_data[0].shape[0]
+        ptrs = self.ptrs[:input_data_len]
+        for shape, storage, data in zip(self.shape, self.storage, input_data):
+
+            assert shape[1:] == data.shape[1:]  # The shape of the passed data must be equal to the specified
+            assert shape[0] >= data.shape[0]  # The length of the input data must be less than or equal to the max buffer capacity
+
+            storage[ptrs] = data
+
+        # Roll the pointers array backward by the size of the stored data
+        self.ptrs = np.roll(self.ptrs, -input_data_len)
+
+        if not self.is_filled:
+            self._len += input_data_len
+
+    # TODO: Deprecated (maybe)
+    def store_with_prob(self, *input_data, prob_to_store=1.0):
+        """A function that allows to store the `input_data` into the circular buffer with a certain probability.
+
+        Args:
+            input_data (numpy.ndarray): A numpy array of the inputs data.
+            prob_to_store (float in range [0.0, 1.0], optional): A probability that determines
+                whether or not to store the `input_data`. Default to 1.0.
+                If equal to 0.0 than doesn't store anything, if equal to 1.0 than store everything.
+
+        Returns:
+            None
+
+        """
+
+        # Clip the probability value
+        prob_to_store = np.clip_value(prob_to_store, 0.0, 1.0)
+
+        if random.random() < prob_to_store:
+            self.store(*input_data)
+
+    def __len__(self):
+        return min(self._len, self.shape[0][0])
+
+    @property
+    def is_filled(self):
+        """Get a boolean value indicating the buffer is filled."""
+
+        if self._len >= self.shape[0][0]:
+            return True
+        else:
+            return False
 
 
 if __name__ == "__main__":
