@@ -1,17 +1,9 @@
+import glob
+
 import xml.etree.ElementTree as ET
 import numpy as np
 import pandas as pd
-import glob
 import tensorflow as tf
-
-imgs_folder = 'images/'
-ants_folder = 'annotations/'
-fields_borders = ['ymin', 'xmin', 'ymax', 'xmax']
-fields_to_drop = [
-    'annotation', 'bndbox', 'database', 'source', 'folder', 'image', 'size', 'object',
-    'difficult', 'segmented', 'truncated', 'occluded',
-    'depth', 'pose'
-]
 
 
 def parse_rec(root):
@@ -545,79 +537,6 @@ class Dataset:
         # Reset all the properties
         self._aug_flag, self._sfl_flag, self.repeat_times = None, None, -1
 
-    # TODO: Finish these three methods
-    def get_data(self):
-        """Gets the whole dataset.
-
-        Returns:
-            Tuple of Numpy arrays: `(img_aug, species, breeds)`.
-        """
-
-        return self.img_aug, self.labels
-
-    def save(self, path):
-        # Reshape into tf.image.encode_jpeg format
-        img_ph = tf.placeholder(tf.uint8, (None, None, None, self.imgs_cashe.shape[-1]))
-        filename_ph = tf.placeholder(tf.uint8, (None, None, None, self.imgs_cashe.shape[-1]))
-        # images = tf.reshape(tf.cast(img_ph, tf.uint8), [16, 16, 1])
-
-        # Resize
-        images_resized = tf.image.resize_images(img_ph, self.size)
-
-        # Encode
-        images_encoded = tf.image.encode_jpeg(img_ph)
-
-        # Create a files name
-        fname = tf.constant(path + filename_ph + ".jpeg")
-
-        # Write files
-        fwrite = tf.write_file(fname, images_encoded)
-
-
-        with tf.Session() as sess:
-
-            feed_dict_train = {img_ph: self.img_aug, filename_ph: y_true_batch}
-
-            sess.run(fwrite, feed_dict=feed_dict_train)
-
-        print("Images Saved!")
-
-    def load(self, path, extension='jpeg'):
-        import glob
-
-        imagepaths = glob.glob(path + '/*.{}'.format(extension), recursive=True)
-        input(imagepaths)
-
-        # Convert imagepaths to Tensor
-        imagepaths = (folder + imgs_folder + array[:, 0]).astype('str')
-        imagepaths = tf.constant(imagepaths)
-
-        def _func(imagepath, borders):
-            image_raw = tf.read_file(imagepath)
-            image = tf.image.decode_and_crop_jpeg(image_raw, borders, channels)
-            if resize:
-                image = tf.image.resize(image, size)
-            image_casted = tf.cast(image / 255, tf.float32)
-
-            return image_casted
-
-        dataset = tf.data.Dataset.from_tensor_slices((imagepaths, borders))
-        dataset = dataset.map(_func).repeat(1)
-
-        iterator = dataset.make_one_shot_iterator()
-        next_example = iterator.get_next()
-
-        def generator():
-            with tf.Session() as sess:
-                while True:
-                    try:
-                        yield sess.run(next_example)
-
-                    except tf.errors.OutOfRangeError:
-                        break
-
-        cashe_imgs = np.array([*generator()]) if resize else [*generator()]
-
 
 if __name__ == "__main__":
     # TODO: Argpars
@@ -625,15 +544,11 @@ if __name__ == "__main__":
     save_to = 'dataset/'
     new_size = (128, 128)
 
-    import time
-
-    start = time.time()
-    for a, b in load_data(folder, new_size, resize=True, mode='dog').batch(32).shuffle().repeat(5).augment().get_batch():
-        pass
-        # for img in a:
-        #     plt.imshow(np.squeeze(img), cmap='gray')
-        #     plt.colorbar()
-        #     plt.show()
-
-    print(time.time() - start)
-    input(123)
+    imgs_folder = 'images/'
+    ants_folder = 'annotations/'
+    fields_borders = ['ymin', 'xmin', 'ymax', 'xmax']
+    fields_to_drop = [
+        'annotation', 'bndbox', 'database', 'source', 'folder', 'image', 'size', 'object',
+        'difficult', 'segmented', 'truncated', 'occluded',
+        'depth', 'pose'
+    ]
