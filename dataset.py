@@ -457,9 +457,7 @@ class Dataset:
         self.storage = data
         self.data_aug = self.storage[0].copy()
 
-        self.k = 2
-        self.cut_size = len(self.storage[0]) * 2
-        self.buf_arr = np.arange(self.cut_size)
+        self.buf_arr = np.arange(len(self.storage[0]) * 2)
 
         self.batch_size = 1
         self.indexes = []
@@ -483,9 +481,14 @@ class Dataset:
 
         return self
 
-    def batch(self, batch_size):
-        self.batch_size = batch_size
-        self.cut_size = len(self.storage[0]) * self.k // self.batch_size
+    def batch(self, batch_size=None):
+        if batch_size:
+            batch_size = abs(int(batch_size))
+            self.batch_size = batch_size
+            self._batch_shape = (batch_size,)
+        else:
+            self.batch_size = 1
+            self._batch_shape = ()
 
         return self
 
@@ -521,19 +524,18 @@ class Dataset:
                     self.shuffle()
 
             if self._aug_flag is None:
-                # TODO: Done: ~Fixed empty_batch size, replace get_batch with `__iter__`
-                self.indexes = self.buf_arr[:self.cut_size // self.k * self.batch_size].reshape(
-                    -1, self.batch_size)  # [-1, self.batch_size] if self.batch_size else (-1,)
+                upper_bound = len(self.buf_arr) // 2 // self.batch_size * self.batch_size
+                self.indexes = self.buf_arr[:upper_bound].reshape(-1, *self._batch_shape)
 
                 for idxs in self.indexes:
                     yield tuple(arr[idxs] for arr in self.storage)
             else:
-                self.indexes = self.buf_arr[:self.cut_size * self.batch_size].reshape(
-                    -1, self.batch_size)
+                upper_bound = len(self.buf_arr) // self.batch_size * self.batch_size
+                self.indexes = self.buf_arr[:upper_bound].reshape(-1, *self._batch_shape)
 
                 for idxs in self.indexes:
                     yield tuple(np.concatenate([self.storage[0], self.data_aug], axis=0)[idxs],
-                                *(np.tile(arr, self.k)[idxs] for arr in self.storage[1:]))
+                                *(np.tile(arr, 2)[idxs] for arr in self.storage[1:]))
 
             counter += 1
 
