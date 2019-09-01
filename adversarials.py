@@ -79,6 +79,14 @@ class AdversarialLosses(Layer):
         self.mode = mode
         self.label_smoothing = label_smoothing
 
+        self.gp, self.lp = False, False
+        if self.mode.endswith('-lp'):
+            self.mode = self.mode[:-3]
+            self.lp = True
+        if self.mode.endswith('-gp'):
+            self.mode = self.mode[:-3]
+            self.gp = True
+
     def call(self, logits_real, logits_fake, *args,
              logits_real_2=None, logits_fake_2=None, lam=10, alpha=1.0, discriminator=None,
              beta=1.0, samples_real=None, samples_fake=None, **kwargs):
@@ -179,7 +187,7 @@ class AdversarialLosses(Layer):
         else:
             raise Exception()
 
-        if self.mode.endswith('-lp') or self.mode.endswith('-gp'):
+        if self.lp or self.gp:
             assert discriminator is not None  # Pass `discriminator` as a parameter
             assert samples_real is not None  # Pass `samples_real` as a parameter
             assert samples_fake is not None  # Pass `samples_fake` as a parameter
@@ -206,7 +214,7 @@ class AdversarialLosses(Layer):
                     continue
 
                 grad_norm = tf.sqrt(tf.reduce_sum(tf.square(gradient + 1e-8), axis=1))
-                if self.mode.endswith('-lp'):
+                if self.lp:
                     gradient_penalty = tf.reduce_mean(tf.square(tf.maximum(0.0, grad_norm - 1.)))
                 else:
                     gradient_penalty = tf.reduce_mean(tf.square(grad_norm - 1.))
