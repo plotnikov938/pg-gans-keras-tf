@@ -48,6 +48,31 @@ class BCE(Layer):
 
 
 class AdversarialLosses(Layer):
+    """Computes the specified adversarial loss.
+
+    Args:
+        mode (obj: str): A string specifying  the type of loss to be calculated.
+            Allowed values: `gan`, `wgan`, `hinge`, `lsgan`, `d2gan`.
+
+            All of the above losses except for `d2gan` could be used both with gradient penalty
+            by specifing postfix `-lp` or  `-pg` and with relativistic gan
+            approach by specifing prefix `r-` or  `ra-` (e.g. `ra-gan-lp`)
+
+        label_smoothing: If greater than `0` then one-sided smoothing will be applied to the labels.
+
+        Resources:
+            - 'gan': [Generative Adversarial Networks](https://arxiv.org/abs/1406.2661)
+            - `wgan`: [Wasserstein GAN](https://arxiv.org/abs/1701.07875)
+            - `hinge`: [Hierarchical Implicit Models and Likelihood-Free Variational Inference]
+                (https://arxiv.org/abs/1702.08896)
+            - `lsgan`: [Least Squares Generative Adversarial Networks](https://arxiv.org/abs/1611.04076)
+            - `d2gan`: [Dual Discriminator Generative Adversarial Nets](https://arxiv.org/abs/1709.03831)
+            - 'r-', 'ra-': [The relativistic discriminator: a key element missing from standard GAN]
+                (https://arxiv.org/abs/1807.00734)
+            - '-lp': [On the regularization of Wasserstein GANs](https://arxiv.org/abs/1709.08894)
+            - '-gp': [Improved Training of Wasserstein GANs](https://arxiv.org/abs/1704.00028)
+    """
+
     def __init__(self, *args, mode='gan', label_smoothing=0, **kwargs):
         super(AdversarialLosses, self).__init__(*args, **kwargs)
 
@@ -55,16 +80,27 @@ class AdversarialLosses(Layer):
         self.label_smoothing = label_smoothing
 
     def call(self, logits_real, logits_fake, *args,
-             logits_real_2=None, logits_fake_2=None, alpha=1.0, beta=1.0,
-             discriminator=None, samples_real=None, samples_fake=None, lam=10, **kwargs):
-        """Compute a specific adversarial loss.
+             logits_real_2=None, logits_fake_2=None, lam=10, alpha=1.0, discriminator=None,
+             beta=1.0, samples_real=None, samples_fake=None, **kwargs):
+        """Computes the specified adversarial loss.
 
         Args:
-          logits_real: The logits computed for real data.
-          logits_fake: The logits computed for generated data.
+            logits_real: A 2-D Tensor  of shape `[batch, lodits_dim]` with logits computed for real data.
+            logits_fake: A 2-D Tensor  of shape `[batch, lodits_dim]` with logits computed for generated data.
+            logits_real_2 (optional): A 2-D Tensor  of shape `[batch, lodits_dim]` with logits computed
+                for real data by second discriminator. Used for `d2gan`. Defaults to None.
+            logits_fake_2 (optional): A 2-D Tensor  of shape `[batch, lodits_dim]` with logits computed
+                for generated data by second discriminator. Used for `d2gan`. Defaults to None.
+            lam (value): A value used to compute loss with `-gp` and `-lp'. Defaults to 10.
+            alpha (float): A value used to compute loss with `-gp` and `-lp'. Defaults to 1.0.
+            discriminator (obj: function, optional):  The same function that computes `logits_real` and `logits_fake`.
+                Used for `-gp` and `-lp' GAN. Defaults to None.
+            beta (float): A value used to compute loss for `d2gan`. Defaults to 1.0.
+            samples_real: Real samples used to compute logits for the loss with `-gp` and `-lp'
+            samples_fake: Fake samples used to compute logits for the loss with `-gp` and `-lp'
 
         Returns:
-          Tuple (loss_generator, loss_discrim)
+            Tuple (loss_generator, loss_discrim) both with the shape [batch, 1]
         """
 
         if self.mode.startswith('r-'):
@@ -107,8 +143,10 @@ class AdversarialLosses(Layer):
             self.loss_discrim = tf.reduce_mean(tf.nn.relu(1.0 - logits_real)) + \
                                 tf.reduce_mean(tf.nn.relu(1.0 + logits_fake))
 
-        # TODO: продумать нормальную имплементацию
         elif self.mode == 'd2gan':
+            assert logits_real_2 is not None  # Pass `logits_real_2` as a parameter
+            assert logits_fake_2 is not None  # Pass `logits_fake_2` as a parameter
+
             logits_real, logits_fake = tf.nn.softplus(logits_real), tf.nn.softplus(logits_fake)
             logits_real_2, logits_fake_2 = tf.nn.softplus(logits_real_2), tf.nn.softplus(logits_fake_2)
 
@@ -117,26 +155,14 @@ class AdversarialLosses(Layer):
                                 tf.reduce_mean(logits_real_2 - beta * tf.math.log(logits_fake_2))
 
         elif 'r-gan' in self.mode:
-            # self.loss_generator = BCEHelperGAN(True, self.label_smoothing, second_term=False)(logits_fake, logits_real)
-            # self.loss_discrim = BCEHelperGAN(True, self.label_smoothing, second_term=False)(logits_real, logits_fake)
-
             self.loss_generator = BCE(self.label_smoothing)(logits_fake, 1)
             self.loss_discrim = BCE(self.label_smoothing)(logits_real, 1)
 
         elif 'ra-gan' in self.mode:
-            # self.loss_generator = BCEHelperGAN(True, self.label_smoothing, second_term=True)(logits_fake, logits_real)/2
-            # self.loss_discrim = BCEHelperGAN(True, self.label_smoothing, second_term=True)(logits_real, logits_fake)/2
-
             self.loss_generator = (BCE(self.label_smoothing)(logits_fake, 1) +
                                    BCE(self.label_smoothing)(logits_real, 0))/2
             self.loss_discrim = (BCE(self.label_smoothing)(logits_real, 1) +
                                  BCE(self.label_smoothing)(logits_fake, 0))/2
-
-        elif any(mode in self.mode for mode in ('r-wgan-sigm', 'ra-wgan-sigm')):
-            self.loss_generator = tf.nn.sigmoid(tf.reduce_mean(logits_real)) - \
-                                  tf.nn.sigmoid(tf.reduce_mean(logits_fake))
-            self.loss_discrim = tf.nn.sigmoid(tf.reduce_mean(logits_fake)) - \
-                                tf.nn.sigmoid(tf.reduce_mean(logits_real))
 
         elif any(mode in self.mode for mode in ('r-lsgan', 'ra-lsgan')):
             self.loss_generator = tf.reduce_mean((logits_fake - 1) ** 2) + \
@@ -154,9 +180,9 @@ class AdversarialLosses(Layer):
             raise Exception()
 
         if self.mode.endswith('-lp') or self.mode.endswith('-gp'):
-            assert discriminator is not None  # Send discriminator as a parameter
-            assert samples_real is not None  # Send real data as a parameter
-            assert samples_fake is not None  # Send fake data as a parameter
+            assert discriminator is not None  # Pass `discriminator` as a parameter
+            assert samples_real is not None  # Pass `samples_real` as a parameter
+            assert samples_fake is not None  # Pass `samples_fake` as a parameter
 
             if not isinstance(samples_real, (list, tuple)):
                 samples_real, samples_fake = [samples_real], [samples_fake]
