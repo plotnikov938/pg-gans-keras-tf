@@ -516,8 +516,8 @@ class Buffer(Dataset):
             If not specified, the outer dimention in the first `shape` tuple will be used as the `size`.
         dtype (optional): A tuple or list of stored data dtypes. Default to `numpy.zeros`.
             Specifies the dtype of stored data.
-        initializer (optional): A tuple or list of functions with the signature `(shape, dtype=None)`.            Specifies the dtype of data stored.
-            Initializers for an arrays with stored data.
+        initializer (optional): A tuple or list of functions with the signature `(shape, dtype=None)`.
+            Initializers for the arrays with the stored data.
     """
 
     def __init__(self, *shape, size=None, dtype='float32', initializer=np.zeros):
@@ -581,7 +581,6 @@ class Buffer(Dataset):
 
         Returns:
             None
-
         """
 
         # Store the input data
@@ -597,7 +596,7 @@ class Buffer(Dataset):
         # Roll the pointers array backward by the size of the stored data
         self.ptrs = np.roll(self.ptrs, -input_data_len)
 
-        if not self.is_filled:
+        if not self.is_full:
             self._len += input_data_len
 
     # TODO: Deprecated (maybe)
@@ -612,11 +611,10 @@ class Buffer(Dataset):
 
         Returns:
             None
-
         """
 
         # Clip the probability value
-        prob_to_store = np.clip_value(prob_to_store, 0.0, 1.0)
+        prob_to_store = clip_value(prob_to_store, 0.0, 1.0)
 
         if random.random() < prob_to_store:
             self.store(*input_data)
@@ -625,8 +623,8 @@ class Buffer(Dataset):
         return min(self._len, self.shape[0][0])
 
     @property
-    def is_filled(self):
-        """Get a boolean value indicating the buffer is filled."""
+    def is_full(self):
+        """Get a boolean value indicating the buffer is full."""
 
         if self._len >= self.shape[0][0]:
             return True
