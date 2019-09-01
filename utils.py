@@ -1,5 +1,6 @@
-from tensorflow.python.keras.layers import Dense, Wrapper
+import numpy as np
 import tensorflow as tf
+from tensorflow.python.keras.layers import Dense, Wrapper
 from tensorflow.python.keras import backend as K
 
 
@@ -112,6 +113,65 @@ def resize_images_tf(images, size, chunks=None, sess=None):
 
 def dropConnect(x, p):
     return tf.nn.dropout(x, rate=1 - p) * p
+
+
+class Scheduler:
+    """Scheduler of value.
+
+    Takes as input current epoch number and return required value based on the linear interpolation
+    for the given discrete datapoints `xp` and `fp`.
+
+        Args:
+            epochs (int): Total epochs number.
+            xp: 1-D sequence of floats.
+                The epochs-coordinates of the data points, must be increasing.
+            fp: 1-D sequence of floats.
+                The values-coordinates of the data points, same length as `xp`.
+      """
+
+    def __init__(self, epochs, xp=None, fp=None, *args, **kwargs):
+        self.epochs = epochs
+        self.xp = np.array(xp)*self.epochs
+        self.fp = np.array(fp)
+
+    def __call__(self, epoch, *args, **kwargs):
+        """Returns value for the given epoch based on the linear interpolation
+
+        Args:
+            epoch (int): Current epoch value.
+
+        Returns
+            interpolated value (float or ndarray): The interpolated value for the given epoch.
+        """
+
+        return np.interp(epoch, self.xp, self.fp)
+
+
+class PixelNormalization(tf.keras.layers.Layer):
+    """Pixel normalization layer.
+
+    Normalize the outputs of the previous layer across channel dimention.
+
+    Args:
+        axis (int): The axis that should be normalized
+        epsilon (float): Small float added to avoid dividing by zero.
+
+    Input shape:
+        Arbitrary. Use the keyword argument `input_shape`
+        (tuple of integers, does not include the samples axis)
+        when using this layer as the first layer in a model.
+
+    Output shape:
+        Same shape as input.
+    """
+
+    def __init__(self, epsilon=1e-8, axis=-1):
+        super(PixelNormalization, self).__init__()
+        self.epsilon = epsilon
+        self.axis = axis
+
+    def call(self, inputs, *args, **kwargs):
+        return inputs * tf.math.rsqrt(tf.reduce_mean(tf.square(inputs), axis=self.axis, keepdims=True) + self.epsilon)
 
 
 # TODO: Refactor later
