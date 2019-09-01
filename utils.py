@@ -2,8 +2,6 @@ import contextlib
 
 import numpy as np
 import tensorflow as tf
-from tensorflow.python.keras.layers import Dense, Wrapper
-from tensorflow.python.keras import backend as K
 import tensorflow_probability.python.distributions as tfd
 
 
@@ -119,10 +117,6 @@ def resize_images_tf(images, size, chunks=None, sess=None):
     return np.concatenate(new_images, axis=0)
 
 
-def dropConnect(x, p):
-    return tf.nn.dropout(x, rate=1 - p) * p
-
-
 class Scheduler:
     """Scheduler of value.
 
@@ -180,48 +174,3 @@ class PixelNormalization(tf.keras.layers.Layer):
 
     def call(self, inputs, *args, **kwargs):
         return inputs * tf.math.rsqrt(tf.reduce_mean(tf.square(inputs), axis=self.axis, keepdims=True) + self.epsilon)
-
-
-# TODO: Refactor later
-class DropConnectDense(Dense):
-    def __init__(self, *args, **kwargs):
-        self.prob = kwargs.pop('prob', 0.5)
-        if 0. < self.prob < 1.:
-            self.uses_learning_phase = True
-        super(DropConnectDense, self).__init__(*args, **kwargs)
-
-    def call(self, x, mask=None):
-        if 0. < self.prob < 1.:
-            self.kernel = K.in_train_phase(K.dropout(self.kernel, self.prob), self.kernel)
-            self.b = K.in_train_phase(K.dropout(self.b, self.prob), self.b)
-
-        # Same as original
-        output = K.dot(x, self.W)
-        if self.bias:
-            output += self.b
-        return self.activation(output)
-
-
-# TODO: Refactor later
-class DropConnect(Wrapper):
-    def __init__(self, layer, prob=1., **kwargs):
-        self.prob = prob
-        self.layer = layer
-        super(DropConnect, self).__init__(layer, **kwargs)
-        if 0. < self.prob < 1.:
-            self.uses_learning_phase = True
-
-    def build(self, input_shape):
-        if not self.layer.built:
-            self.layer.build(input_shape)
-            self.layer.built = True
-        super(DropConnect, self).build()
-
-    def compute_output_shape(self, input_shape):
-        return self.layer.compute_output_shape(input_shape)
-
-    def call(self, x):
-        if 0. < self.prob < 1.:
-            self.layer.kernel = K.in_train_phase(K.dropout(self.layer.kernel, self.prob), self.layer.kernel)
-            self.layer.bias = K.in_train_phase(K.dropout(self.layer.bias, self.prob), self.layer.bias)
-        return self.layer.call(x)
