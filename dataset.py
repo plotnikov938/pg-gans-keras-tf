@@ -397,59 +397,21 @@ def load_data(folder, size, frac=1.0, split=0.3, equal_sets=True, resize=False, 
     if resize:
         cashe_imgs = np.array([*generator()])
 
-        return Map(DatasetCatDog(cashe_imgs[train_rnd_ids],
+        return Map(Dataset(cashe_imgs[train_rnd_ids],
                            df[['name', 'breed_id']].iloc[train_rnd_ids].values,
                            size), \
-                   DatasetCatDog(cashe_imgs[test_rnd_ids],
+                   Dataset(cashe_imgs[test_rnd_ids],
                            df[['name', 'breed_id']].iloc[test_rnd_ids].values,
                            size))
     else:
         cashe_imgs = [*generator()]
 
-        return Map(DatasetCatDog([cashe_imgs[i] for i in train_rnd_ids],
+        return Map(Dataset([cashe_imgs[i] for i in train_rnd_ids],
                            df[['name', 'breed_id']].iloc[train_rnd_ids].values,
                            size), \
-                   DatasetCatDog([cashe_imgs[i] for i in test_rnd_ids],
+                   Dataset([cashe_imgs[i] for i in test_rnd_ids],
                            df[['name', 'breed_id']].iloc[test_rnd_ids].values,
                            size))
-
-
-# TODO: DONE: Arg sess, chunks, docs, new logic
-def resize_images_tf(images, size, chunks=None, sess=None):
-    """A function that resizes `images` to `size` using tensorflow bilinear interpolation.
-
-    Args:
-        images: A numpy array with shape (batch_size, height, width, channels).
-        size: A list of 'int' or a numpy array of type 'int' containing the new size of images in format(height, width).
-        chunks: An optional 'int'. Defaults to None.
-            If the input array `images` is to large to fit in the memory for processing in one go, you can split
-            the `images` into chunks, and than process each chunk separately.
-        sess: An optional tf.Session() object. Defaults to None.
-            If None, creates a new tf.Session() object inside the function.
-            Otherwise uses specified tf.Session() object.
-
-    Returns:
-        A numpy array of type `float32` containing images with the new size.
-    """
-
-    import tensorflow as tf
-    tf = tf.compat.v1
-
-    need_close = False if sess else True
-    sess = sess or tf.Session()
-    chunks = chunks or 1
-
-    # Split into chunks
-    new_images = []
-    ph = tf.placeholder(tf.float32, (None, None, None, None))
-    img = tf.image.resize_bilinear(ph, size, align_corners=True)
-    for image_chunk in np.array_split(images, chunks):
-        new_images.append(sess.run(img, {ph: image_chunk}))
-
-    if need_close:
-        sess.close()
-
-    return np.concatenate(new_images, axis=0)
 
 
 class Dataset:
