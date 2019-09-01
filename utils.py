@@ -2,6 +2,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.python.keras.layers import Dense, Wrapper
 from tensorflow.python.keras import backend as K
+import tensorflow_probability.python.distributions as tfd
 
 
 def clip_value(a, a_min, a_max):
