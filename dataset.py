@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 
-from utils import clip_value
+from utils import clip_value, resize_images_tf
 
 
 def parse_rec(root):
@@ -412,6 +412,45 @@ def load_data(folder, size, frac=1.0, split=0.3, equal_sets=True, resize=False, 
                    Dataset([cashe_imgs[i] for i in test_rnd_ids],
                            df[['name', 'breed_id']].iloc[test_rnd_ids].values,
                            size))
+
+
+def preprocess_dataset(train_data, test_data=None, size=None):
+    """Preprocesses an input images dataset
+
+    The function concatenates train and test data then standardizes the images in range [-1, 1],
+    resizes them, if necessary, and applies one-hot tranformation to the conctenated labels.
+
+    Args:
+        train_data: A tuple or list containing train images labels.
+            Images should be a 4-D `numpy.ndarray` of shape `[train_batch, height, width, channels]`.
+            Labels should be a 1-D `numpy.ndarray` of shape `[train_batch]`.
+        test_data (optional): A tuple or list containing test images and labels. Default to None.
+            Images and labels have the same dtype and shapes as the train_date.
+            If None than test data will not be used.
+        size (optional): A 1-D int32 Tensor of 2 elements: `new_height, new_width`.  The initial
+            size for the images in the train dataset. By default, the size of the images does not change.
+
+    Returns:
+        Prepared for training and evaluation dataset with train images
+        of shapes `[train_batch + test_batch, height, width, channels]` in range [-1, 1] and one-hoted labels
+    """
+
+    X_train, y_train = train_data
+    if test_data:
+        X_test, y_test = test_data
+        X_train, y_train = np.concatenate((X_train, X_test)), np.concatenate((y_train, y_test))
+
+    if len(X_train.shape) == 3:
+        X_train = X_train[..., None]
+
+    # Rescale -1 to 1
+    X_train = (((X_train - X_train.min()) / X_train.max()) * 2 - 1)
+    if size:
+        X_train = resize_images_tf(X_train, size)
+
+    y_train = tf.keras.utils.to_categorical(y_train, y_train.max() + 1)
+
+    return X_train, y_train
 
 
 class Dataset:
