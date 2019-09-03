@@ -3,6 +3,7 @@ import contextlib
 import numpy as np
 import tensorflow as tf
 import tensorflow_probability.python.distributions as tfd
+import imageio
 
 
 @contextlib.contextmanager
@@ -79,7 +80,22 @@ def mixup_func(major_samples, minor_samples, alpha=0):
     return mixed_samples
 
 
-# TODO: DONE: Arg sess, chunks, docs, new logic
+def make_gif(filenames, path):
+    """Make gif from the images
+
+    Args:
+        filenames: An iterable object containing image paths.
+        path (obj: `str`): The path to write the gif .
+    Returns:
+        None
+    """
+
+    images = []
+    for filename in filenames:
+        images.append(imageio.imread(filename))
+    imageio.mimsave(path, images)
+
+
 def resize_images_tf(images, size, chunks=None, sess=None):
     """A function that resizes `images` to `size` using tensorflow bilinear interpolation.
 
