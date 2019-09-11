@@ -20,12 +20,15 @@ class BCE(Layer):
         self.label_smoothing = label_smoothing
         self.eps = eps
 
-    def call(self, logits, label):
+    def call(self, logits, label, reduce_op=None):
         """Computes the binary cross entropy loss from logits with label broadcasting.
 
         Args:
             logits: A `Tensor` of type `float32` or `float64`.
             label: A `Tensor` of the same type as `logits`.
+            reduce_op: A function that reduces output tensor along all dimensions. Defaults to None.
+                If None, than reduction along all dimensions is not used. For instance, the function could be
+                `tf.reduce_mean` or defined by user.
 
         Returns:
             A `Tensor` of the same type as `logits` with the binary cross entropy loss.
@@ -44,7 +47,7 @@ class BCE(Layer):
         elif label != 0.0:
             result = math_ops.add(result, -logits * label)
 
-        return tf.reduce_mean(result)
+        return reduce_op(result)
 
 
 class AdversarialLosses(Layer):
@@ -89,7 +92,7 @@ class AdversarialLosses(Layer):
 
     def call(self, logits_real, logits_fake, *args,
              logits_real_2=None, logits_fake_2=None, lam=10, alpha=1.0, discriminator=None,
-             beta=1.0, samples_real=None, samples_fake=None, **kwargs):
+             beta=1.0, samples_real=None, samples_fake=None, reduce_op=None, **kwargs):
         """Computes the specified adversarial loss.
 
         Args:
@@ -106,6 +109,9 @@ class AdversarialLosses(Layer):
             beta (float): A value used to compute loss for `d2gan`. Defaults to 1.0.
             samples_real: Real samples used to compute logits for the loss with `-gp` and `-lp'
             samples_fake: Fake samples used to compute logits for the loss with `-gp` and `-lp'
+            reduce_op: A function that reduces output tensor along all dimensions. Defaults to None.
+                If None, than reduction along all dimensions is not used. For instance, the function could be
+                `tf.reduce_mean` or defined by user.
 
         Returns:
             Tuple (loss_generator, loss_discrim) both with the shape [batch, 1]
@@ -119,13 +125,13 @@ class AdversarialLosses(Layer):
                                         logits_fake - tf.reduce_mean(logits_real))
 
         if self.mode == 'gan':
-            self.loss_generator = BCE(self.label_smoothing)(logits_fake, 1)
-            self.loss_discrim = BCE(self.label_smoothing)(logits_fake, 0) + \
-                                BCE(self.label_smoothing)(logits_real, 1)
+            self.loss_generator = BCE(self.label_smoothing)(logits_fake, 1, reduce_op=reduce_op)
+            self.loss_discrim = BCE(self.label_smoothing)(logits_fake, 0, reduce_op=reduce_op) + \
+                                BCE(self.label_smoothing)(logits_real, 1, reduce_op=reduce_op)
 
         elif 'wgan' in self.mode:
-            self.loss_generator = -tf.reduce_mean(logits_fake)
-            self.loss_discrim = tf.reduce_mean(logits_fake) - tf.reduce_mean(logits_real)
+            self.loss_generator = -reduce_op(logits_fake)
+            self.loss_discrim = reduce_op(logits_fake) - reduce_op(logits_real)
 
         elif self.mode == 'began':
             print("`BEGAN` hasn't yet been properly implemented")
@@ -136,20 +142,21 @@ class AdversarialLosses(Layer):
             # self.loss_generator = -tf.nn.tanh(tf.reduce_mean(logits_fake))
             # self.loss_discrim = tf.nn.tanh(tf.reduce_mean(logits_fake))*a - \
             #                     tf.nn.tanh(tf.reduce_mean(logits_real))
-            self.loss_generator = -tf.reduce_mean(tf.math.log(logits_fake + 1e-8))
-            k = -tf.reduce_mean(tf.math.log(logits_real + 1e-8) + tf.math.log(1 - logits_fake + 1e-8)) / self.loss_generator
+            self.loss_generator = -reduce_op(tf.math.log(logits_fake + 1e-8))
+            k = -reduce_op(tf.math.log(logits_real + 1e-8) + tf.math.log(1 - logits_fake + 1e-8)) / self.loss_generator
             k = tf.clip_by_value(tf.stop_gradient(k), 1e-6, 1)
-            self.loss_discrim = -tf.reduce_mean(tf.math.log(logits_real + 1e-8)) - tf.reduce_mean(tf.math.log(1 - logits_fake + 1e-8))*k
+            self.loss_discrim = -reduce_op(tf.math.log(logits_real + 1e-8)) - reduce_op(
+                tf.math.log(1 - logits_fake + 1e-8)) * k
 
         elif self.mode == 'lsgan':
-            self.loss_generator = tf.reduce_mean((logits_fake - 1.0) ** 2)# / 2
-            self.loss_discrim = (tf.reduce_mean((logits_real - 1.0) ** 2) +
-                                 tf.reduce_mean(logits_fake ** 2)) / 2.
+            self.loss_generator = reduce_op((logits_fake - 1.0) ** 2)  # / 2
+            self.loss_discrim = (reduce_op((logits_real - 1.0) ** 2) +
+                                 reduce_op(logits_fake ** 2)) / 2.
 
         elif self.mode == 'hinge':
-            self.loss_generator = tf.reduce_mean(tf.nn.relu(1.0 - logits_fake))
-            self.loss_discrim = tf.reduce_mean(tf.nn.relu(1.0 - logits_real)) + \
-                                tf.reduce_mean(tf.nn.relu(1.0 + logits_fake))
+            self.loss_generator = reduce_op(tf.nn.relu(1.0 - logits_fake))
+            self.loss_discrim = reduce_op(tf.nn.relu(1.0 - logits_real)) + \
+                                reduce_op(tf.nn.relu(1.0 + logits_fake))
 
         elif self.mode == 'd2gan':
             assert logits_real_2 is not None  # Pass `logits_real_2` as a parameter
@@ -158,31 +165,31 @@ class AdversarialLosses(Layer):
             logits_real, logits_fake = tf.nn.softplus(logits_real), tf.nn.softplus(logits_fake)
             logits_real_2, logits_fake_2 = tf.nn.softplus(logits_real_2), tf.nn.softplus(logits_fake_2)
 
-            self.loss_generator = tf.reduce_mean(-logits_fake + beta * tf.math.log(logits_fake_2))
-            self.loss_discrim = tf.reduce_mean(-alpha * tf.math.log(logits_real) + logits_fake) + \
-                                tf.reduce_mean(logits_real_2 - beta * tf.math.log(logits_fake_2))
+            self.loss_generator = reduce_op(-logits_fake + beta * tf.math.log(logits_fake_2))
+            self.loss_discrim = reduce_op(-alpha * tf.math.log(logits_real) + logits_fake) + \
+                                reduce_op(logits_real_2 - beta * tf.math.log(logits_fake_2))
 
         elif 'r-gan' in self.mode:
-            self.loss_generator = BCE(self.label_smoothing)(logits_fake, 1)
-            self.loss_discrim = BCE(self.label_smoothing)(logits_real, 1)
+            self.loss_generator = BCE(self.label_smoothing)(logits_fake, 1, reduce_op=reduce_op)
+            self.loss_discrim = BCE(self.label_smoothing)(logits_real, 1, reduce_op=reduce_op)
 
         elif 'ra-gan' in self.mode:
-            self.loss_generator = (BCE(self.label_smoothing)(logits_fake, 1) +
-                                   BCE(self.label_smoothing)(logits_real, 0))/2
-            self.loss_discrim = (BCE(self.label_smoothing)(logits_real, 1) +
-                                 BCE(self.label_smoothing)(logits_fake, 0))/2
+            self.loss_generator = (BCE(self.label_smoothing)(logits_fake, 1, reduce_op=reduce_op) +
+                                   BCE(self.label_smoothing)(logits_real, 0, reduce_op=reduce_op)) / 2
+            self.loss_discrim = (BCE(self.label_smoothing)(logits_real, 1, reduce_op=reduce_op) +
+                                 BCE(self.label_smoothing)(logits_fake, 0, reduce_op=reduce_op)) / 2
 
         elif any(mode in self.mode for mode in ('r-lsgan', 'ra-lsgan')):
-            self.loss_generator = tf.reduce_mean((logits_fake - 1) ** 2) + \
-                                  tf.reduce_mean((logits_real + 1) ** 2)
-            self.loss_discrim = tf.reduce_mean((logits_real - 1) ** 2) + \
-                                tf.reduce_mean((logits_fake + 1) ** 2)
+            self.loss_generator = reduce_op((logits_fake - 1) ** 2) + \
+                                  reduce_op((logits_real + 1) ** 2)
+            self.loss_discrim = reduce_op((logits_real - 1) ** 2) + \
+                                reduce_op((logits_fake + 1) ** 2)
 
         elif any(mode in self.mode for mode in ('r-hinge', 'ra-hinge')):
-            self.loss_generator = tf.reduce_mean(tf.nn.relu(1.0 - logits_fake)) + \
-                                  tf.reduce_mean(tf.nn.relu(1.0 + logits_real))
-            self.loss_discrim = tf.reduce_mean(tf.nn.relu(1.0 - logits_real)) + \
-                                tf.reduce_mean(tf.nn.relu(1.0 + logits_fake))
+            self.loss_generator = reduce_op(tf.nn.relu(1.0 - logits_fake)) + \
+                                  reduce_op(tf.nn.relu(1.0 + logits_real))
+            self.loss_discrim = reduce_op(tf.nn.relu(1.0 - logits_real)) + \
+                                reduce_op(tf.nn.relu(1.0 + logits_fake))
 
         else:
             raise Exception()
@@ -215,9 +222,9 @@ class AdversarialLosses(Layer):
 
                 grad_norm = tf.sqrt(tf.reduce_sum(tf.square(gradient + 1e-8), axis=1))
                 if self.lp:
-                    gradient_penalty = tf.reduce_mean(tf.square(tf.maximum(0.0, grad_norm - 1.)))
+                    gradient_penalty = reduce_op(tf.square(tf.maximum(0.0, grad_norm - 1.)))
                 else:
-                    gradient_penalty = tf.reduce_mean(tf.square(grad_norm - 1.))
+                    gradient_penalty = reduce_op(tf.square(grad_norm - 1.))
 
                 gradient_penalties.append(lam * gradient_penalty)
 
