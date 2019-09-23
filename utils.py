@@ -1,9 +1,18 @@
 import contextlib
+import importlib
 
 import numpy as np
 import tensorflow as tf
 import tensorflow_probability.python.distributions as tfd
 import imageio
+
+
+def get_config(path):
+    spec = importlib.util.spec_from_file_location("config", path)
+    config = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(config)
+
+    return config.load()
 
 
 @contextlib.contextmanager
