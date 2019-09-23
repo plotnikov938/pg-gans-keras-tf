@@ -13,7 +13,7 @@ from dataset import Buffer
 from utils import mixup_func, PixelNormalization
 
 
-initializer = get_config()['initializer']
+initializer = 'he_normal'
 
 
 def plot(samples, rows, cols, title=None):
@@ -62,28 +62,58 @@ def downscale2d(x, factor=2):
                               data_format='NHWC')  # NOTE: requires tf_config['graph_options.place_pruned_graph'] =
 
 
+class MinibatchStdev(layers.Layer):
+    """
+    In this `MinibatchStdev` impementation minibatching is not supported and
+    instead of concatenation the inputs with the stdev, adding stdev is done
+    by replacing the last channel of the inputs.
+    """
+
+    def __init__(self, **kwargs):
+        super(MinibatchStdev, self).__init__(**kwargs)
+
+    def call(self, inputs):
+        # Subtract the mean value for each pixel across channels over the group
+        inputs -= tf.reduce_mean(inputs, axis=0, keepdims=True)
+
+        # calculate the average of the squared differences (variance)
+        mean_sq_diff = tf.reduce_mean(tf.math.square(inputs), axis=0, keepdims=True)
+
+        stdev = tf.math.sqrt(mean_sq_diff + 1e-8)
+
+        # calculate the mean standard deviation across each pixel coord
+        mean_pix = tf.reduce_mean(stdev, keepdims=True)
+
+        # scale this up to be the size of one input feature map for each sample
+        shape = tf.shape(inputs)
+        output = tf.tile(mean_pix, (shape[0], shape[1], shape[2], 1))
+
+        # replace the last channel of the inputs with the stdev by concatenation
+        return tf.concat([inputs[..., :-1], output], axis=-1)
+
+
 class LayerPG(layers.Layer):
-    def __init__(self, layer, filters, kernel, padding='same', strides=(1, 1), act=None, use_wscale=True, scale=1, **kwargs):
+    def __init__(self, layer, filters, kernel, padding='same', strides=(1, 1), act=None, scale=1, **kwargs):
 
         super(LayerPG, self).__init__(**kwargs)
 
-        assert scale > 0 # Scale factor must be greater than zero
+        assert scale > 0  # Scale factor must be greater than zero
         self.scale = scale
 
         self.drop = layers.Dropout(rate=0.0)
 
         self.layer_0_0 = layer(filters=filters,
-                             kernel_size=kernel,
-                             padding='same',
-                             activation=act,
-                             kernel_initializer=initializer(use_wscale=use_wscale))
+                               kernel_size=kernel,
+                               padding='same',
+                               activation=act,
+                               kernel_initializer=initializer)
 
         self.layer_0 = layer(filters=filters,
                              kernel_size=kernel,
                              padding=padding,
                              strides=strides,
                              activation=act,
-                             kernel_initializer=initializer(use_wscale=use_wscale))
+                             kernel_initializer=initializer)
 
         self.bn = layers.BatchNormalization()
         self.pn = PixelNormalization()
@@ -136,7 +166,7 @@ class DecoderPG(models.Model):
         # TODO: Check the layer
         self.dense_list = [layers.Dense(units,
                                         activation=self.act,
-                                        kernel_initializer=initializer(use_wscale=use_wscale, gain=2 / 16)) for units in
+                                        kernel_initializer=initializer) for units in
                            list(self.input_units)]
 
         self.bn = layers.BatchNormalization()
@@ -148,15 +178,15 @@ class DecoderPG(models.Model):
         for train_stage in self.train_stages:
             filters = train_stage['size'][-1]
             if not self.layers_pg:
-                layer_pg = LayerPG(layer, filters, train_stage['size'][0], padding='valid', act=self.act, use_wscale=use_wscale)
+                layer_pg = LayerPG(layer, filters, train_stage['size'][0], padding='valid', act=self.act)
             else:
-                layer_pg = LayerPG(layer, filters, 4, act=self.act, use_wscale=use_wscale, scale=2)
+                layer_pg = LayerPG(layer, filters, 4, act=self.act, scale=2)
 
             self.layers_pg.append(layer_pg)
 
             # Create rgb img for each output
             layer_to_rgb = layer(channels, 4, padding='same',
-                                 kernel_initializer=initializer(use_wscale=use_wscale, gain=1),
+                                 kernel_initializer=initializer,
                                  activation=self.output_act,
                                  # name='to_rgb',
                                  )
@@ -239,22 +269,23 @@ class EncoderPG(models.Model):
                                            kernel_size=4,
                                            padding='same',
                                            activation=act,
-                                           kernel_initializer=initializer(use_wscale=use_wscale),
+                                           kernel_initializer=initializer,
                                            # name='from_rgb',
                                            )
 
             self.layers_from_rgb.append(layer_from_rgb)
 
-            layer_pg = LayerPG(layers.Conv2D, filters, 4, act=act, use_wscale=use_wscale, scale=0.5)
+            layer_pg = LayerPG(layers.Conv2D, filters, 4, act=act, scale=0.5)
             self.layers_pg.append(layer_pg)
 
+        self.mb_std = MinibatchStdev()
         self.tile = None
         self.concat = layers.Concatenate()
         self.conv = None
         self.flat = layers.Flatten()
         self.dense_list = [layers.Dense(units,
                                         activation=self.output_act,
-                                        kernel_initializer=initializer(use_wscale=use_wscale, gain=1)) for units in
+                                        kernel_initializer=initializer) for units in
                            list(self.output_units)]
 
     def call(self, inputs, alpha=1.0, training=None):
@@ -264,6 +295,8 @@ class EncoderPG(models.Model):
             input_imgs, labels_emb = inputs, None
 
         output, output_large = self._from_rgb(input_imgs), input_imgs
+
+        output = self.mb_std(output)
 
         self.output_logits = []
         ptr = self._get_input_layer_ptr(output)
@@ -350,10 +383,10 @@ class GAN_PG:
         self.alpha = tf.Variable(1.0, name='alpha', trainable=False)
         self.learning_rate = None
 
-        self.generator = DecoderPG(self.train_stages, channels, use_wscale=use_wscale, act=gen_act,
+        self.generator = DecoderPG(self.train_stages, channels, act=gen_act,
                                    input_units=[latent_size], output_act='tanh', drop_rate=0.0,
                                    batch_norm=batch_norm, pixel_norm=pixel_norm, name='generator')
-        self.discriminator = EncoderPG(self.train_stages, latent_size, use_wscale=use_wscale,
+        self.discriminator = EncoderPG(self.train_stages, latent_size,
                                        act=dis_act, output_units=[1], output_act=None, drop_rate=drop_rate,
                                        batch_norm=False, pixel_norm=False, name='discriminator')
 
