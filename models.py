@@ -14,8 +14,10 @@ from utils import mixup_func, PixelNormalization
 
 
 initializer = 'he_normal'
+wgan_gp = False
 
 
+# TODO: Move to the utils.py
 def plot(samples, rows, cols, title=None):
     samples = samples[:rows*cols]
 
@@ -31,10 +33,10 @@ def plot(samples, rows, cols, title=None):
     fig = plt.figure(figsize=(cols, rows))
     if reshaped.shape[-1] == 1:
         plt.imshow(np.squeeze(reshaped), cmap='Greys_r',
-          interpolation='nearest')
+                   interpolation='nearest')
     else:
         plt.imshow(reshaped * 0.5 + 0.5,
-          interpolation='nearest')
+                   interpolation='nearest')
 
     plt.title(title)
     plt.axis('off')
@@ -59,7 +61,7 @@ def downscale2d(x, factor=2):
     with tf.variable_scope('Downscale2D'):
         ksize = [1, factor, factor, 1]
         return tf.nn.avg_pool2d(x, ksize=ksize, strides=ksize, padding='VALID',
-                              data_format='NHWC')  # NOTE: requires tf_config['graph_options.place_pruned_graph'] =
+                                data_format='NHWC')  # NOTE: requires tf_config['graph_options.place_pruned_graph'] =
 
 
 class MinibatchStdev(layers.Layer):
@@ -72,7 +74,7 @@ class MinibatchStdev(layers.Layer):
     def __init__(self, **kwargs):
         super(MinibatchStdev, self).__init__(**kwargs)
 
-    def call(self, inputs):
+    def call(self, inputs, **kwargs):
         # Subtract the mean value for each pixel across channels over the group
         inputs -= tf.reduce_mean(inputs, axis=0, keepdims=True)
 
@@ -93,23 +95,20 @@ class MinibatchStdev(layers.Layer):
 
 
 class LayerPG(layers.Layer):
-    def __init__(self, layer, filters, kernel, padding='same', strides=(1, 1), act=None, scale=1, **kwargs):
+    def __init__(self, layer, filters, kernel_size, padding='same', strides=(1, 1), act=None, scale=1., **kwargs):
 
         super(LayerPG, self).__init__(**kwargs)
 
         assert scale > 0  # Scale factor must be greater than zero
+        self.layer = layer
         self.scale = scale
+        self.kernel_size = kernel_size
+        self.act = act
 
         self.drop = layers.Dropout(rate=0.0)
 
-        self.layer_0_0 = layer(filters=filters,
-                               kernel_size=kernel,
-                               padding='same',
-                               activation=act,
-                               kernel_initializer=initializer)
-
         self.layer_0 = layer(filters=filters,
-                             kernel_size=kernel,
+                             kernel_size=kernel_size,
                              padding=padding,
                              strides=strides,
                              activation=act,
@@ -118,19 +117,41 @@ class LayerPG(layers.Layer):
         self.bn = layers.BatchNormalization()
         self.pn = PixelNormalization()
 
-    def call(self, inputs, drop_rate=0.0, batch_norm=None, pixel_norm=None, training=None):
+    def build(self, input_shapes):
 
-        # Scale images
-        if self.scale != 1:
-            get_scaled_dim = lambda dim: round(int(inputs.shape[dim])*self.scale)
-            if self.scale < 1:
-              inputs = downscale2d(inputs)
+        self.layer_0_0 = self.layer(filters=int(input_shapes[-1]),
+                                    kernel_size=self.kernel_size,
+                                    padding='same',
+                                    activation=self.act,
+                                    kernel_initializer=initializer)
+
+
+    def call(self, inputs, drop_rate=0.0, batch_norm=None, pixel_norm=None, training=None, **kwargs):
+
+        # Upscale the images
+        if self.scale > 1:
+            def get_scaled_dim(dim):
+                return round(int(inputs.shape[dim])*self.scale)
+            if wgan_gp:
+                inputs = upscale2d(inputs)
             else:
-              inputs = upscale2d(inputs)
-            # inputs = tf.image.resize_bilinear(inputs,
-            #                                   (get_scaled_dim(1), get_scaled_dim(2)))
+                inputs = tf.image.resize_bilinear(inputs,
+                                                  (get_scaled_dim(1), get_scaled_dim(2)),
+                                                  align_corners=True)
 
-        # inputs = self.layer_0_0(inputs)
+        # Apply dropout here
+        self.drop.rate = drop_rate
+
+        inputs = self.drop(inputs, training=training)
+
+        if True:
+            outputs = self.layer_0_0(inputs)
+
+            if batch_norm:
+                outputs = self.bn(outputs, training=training)
+
+            if pixel_norm:
+                inputs = self.pn(outputs)
 
         outputs = self.layer_0(inputs)
 
@@ -140,11 +161,22 @@ class LayerPG(layers.Layer):
         if pixel_norm:
             outputs = self.pn(outputs)
 
+        # Downscale the images
+        if self.scale < 1:
+            def get_scaled_dim(dim):
+                return round(int(outputs.shape[dim])*self.scale)
+            if wgan_gp:
+                outputs = downscale2d(outputs)
+            else:
+                outputs = tf.image.resize_bilinear(outputs,
+                                                   (get_scaled_dim(1), get_scaled_dim(2)),
+                                                   align_corners=True)
+
         return outputs
 
 
 class DecoderPG(models.Model):
-    def __init__(self, train_stages, channels, use_wscale=True, act=None, input_units=None, output_act='tanh',
+    def __init__(self, train_stages, channels, act=None, input_units=None, output_act='tanh',
                  drop_rate=0.0, batch_norm=None, pixel_norm=None, **kwargs):
         super(DecoderPG, self).__init__(**kwargs)
 
@@ -245,7 +277,7 @@ class DecoderPG(models.Model):
 
 
 class EncoderPG(models.Model):
-    def __init__(self, train_stages, latent_size, use_wscale=True, act=None, output_units=1, output_act=None,
+    def __init__(self, train_stages, latent_size, act=None, output_units=1, output_act=None,
                  drop_rate=0.0, batch_norm=None, pixel_norm=None, **kwargs):
         super(EncoderPG, self).__init__(**kwargs)
 
@@ -326,7 +358,7 @@ class EncoderPG(models.Model):
             self.conv = layers.Conv2D(filters=self.latent_size,
                                       kernel_size=output.shape.as_list()[1:3],
                                       activation=self.act,
-                                      kernel_initializer=initializer(use_wscale=self.use_wscale))
+                                      kernel_initializer=initializer)
         output = self.conv(output)
 
         # Squeeze height and width dimensions
@@ -365,7 +397,7 @@ class EncoderPG(models.Model):
 
 
 class GAN_PG:
-    def __init__(self, train_stages, channels, latent_size, use_wscale=True, labels_emb_size=None, mixup_alpha=None,
+    def __init__(self, train_stages, channels, latent_size, labels_emb_size=None, mixup_alpha=None,
                  dis_act=None, gen_act=None, drop_rate=0.0, batch_norm=False, pixel_norm=False,
                  freeze_trained=False, dis_train_iters=1, gen_train_iters=1, buffer_size=False, buffer_epoch_depth=1, **kwargs):
 
@@ -509,7 +541,7 @@ class GAN_PG:
     def compile_model(self,
                       optimizer,
                       loss,
-                      loss_weights=None):            
+                      loss_weights=None):
         self.optimizer = optimizer
         if isinstance(loss, str):
             self.gan_mode = loss
