@@ -13,6 +13,7 @@ from dataset import Buffer
 from utils import mixup_func, PixelNormalization
 
 
+# TODO: Remove later
 initializer = 'he_normal'
 wgan_gp = False
 
@@ -188,92 +189,87 @@ class DecoderPG(models.Model):
         self.input_units = input_units or []
         self.output_act = output_act
 
-        self.concat = layers.Lambda(lambda x: tf.concat(x, axis=-1), name='concatenate')
-        self.expand_dims = layers.Lambda(lambda x: x[:, None, None], name='expand_dims')
+        self.layers_pg, self.layers_to_rgb = [], []
 
-        self.output_imgs = []
-        self.layers_pg = []
-        self.layers_to_rgb = []
-
-        # TODO: Check the layer
+        self.transition = layers.Lambda(lambda x: (x[0] - x[1]) * x[2] + x[1])
+        self.resize = layers.Lambda(lambda args: tf.image.resize_bilinear(args[0], args[1].shape[1:3],
+                                                                          align_corners=True))
         self.dense_list = [layers.Dense(units,
-                                        activation=self.act,
+                                        activation=None,
                                         kernel_initializer=initializer) for units in
                            list(self.input_units)]
 
-        self.bn = layers.BatchNormalization()
-        self.pn = PixelNormalization()
+        self.concat = layers.Lambda(lambda x: tf.concat(x, axis=-1), name='concatenate')
+        self.expand_dims = layers.Lambda(lambda x: x[:, None, None], name='expand_dims')
 
-        # Collect all layers into the list
-        layer = layers.Conv2DTranspose
-        # TODO: Test the original order
         for train_stage in self.train_stages:
             filters = train_stage['size'][-1]
             if not self.layers_pg:
-                layer_pg = LayerPG(layer, filters, train_stage['size'][0], padding='valid', act=self.act)
+                layer_pg = LayerPG(layers.Conv2DTranspose, filters, train_stage['size'][0],
+                                   padding='valid', act=self.act, scale=1)
             else:
-                layer_pg = LayerPG(layer, filters, 4, act=self.act, scale=2)
-
-            self.layers_pg.append(layer_pg)
+                layer_pg = LayerPG(layers.Conv2D, filters, 3,
+                                   padding='same', act=self.act, scale=2)
 
             # Create rgb img for each output
-            layer_to_rgb = layer(channels, 4, padding='same',
-                                 kernel_initializer=initializer,
-                                 activation=self.output_act,
-                                 # name='to_rgb',
-                                 )
+            layer_to_rgb = layers.Conv2D(channels, 1,
+                                         padding='same',
+                                         activation=self.output_act,
+                                         kernel_initializer=initializer)
 
+            self.layers_pg.append(layer_pg)
             self.layers_to_rgb.append(layer_to_rgb)
 
-    def call(self, inputs, alpha=1.0, training=None):
-        if isinstance(inputs, tuple):
-            inputs = list(inputs)
+    def call(self, inputs, stage=-1, alpha=1.0, training=None):
+        if stage < 0:
+            stage = len(self.train_stages) + stage
+
+        if not isinstance(inputs, (list, tuple)):
+            inputs = [inputs]
+
+        if len(inputs) == 1:
+            noise, labels_emb = inputs[0], None
+        else:
+            noise, labels_emb = inputs
+
+        output = noise
 
         # Concatenate noise vector with labels embedding vector
-        if isinstance(inputs, list):
-            for dense in self.dense_list:
-                inputs[0] = dense(inputs[0])
+        if labels_emb is not None:
+            output = self.concat([output, labels_emb])
 
-            inputs = self.concat(inputs)
-
-        else:
-            for dense in self.dense_list:
-                inputs = dense(inputs)
+        for dense in self.dense_list:
+            output = dense(output)
 
         # Prepare inputs before feeding to the convolution layer
-        output = self.expand_dims(inputs)
+        output = self.expand_dims(output)
 
-        if self.batch_norm:
-            inputs = self.bn(inputs, training=training)
-
-        if self.pixel_norm:
-            inputs = self.pn(inputs)
-
-        # Collect all the output images into the list
-        self.output_imgs = []  # Flush
-        self.output_transitions = []  # Flush
-        for layer_pg, layer_to_rgb in zip(self.layers_pg, self.layers_to_rgb):
+        output_imgs = []
+        for layer_pg, layer_to_rgb in zip(self.layers_pg[:stage + 1], self.layers_to_rgb[:stage + 1]):
+            # TODO: Test
             # No batch_norm and pixel_norm for the output_img
-            output_img = layer_to_rgb(layer_pg(output,
-                                               drop_rate=self.drop_rate,
-                                               training=training))
-            if self.output_transitions:
-                upscaled_imgs = tf.image.resize_bilinear(self.output_imgs[-1], output_img.shape[1:3],
-                                                         align_corners=True)
-                smoothed_transition = (output_img - upscaled_imgs) * alpha + upscaled_imgs
-                self.output_transitions.append(smoothed_transition)
-            else:
-                self.output_transitions.append(output_img)
+            # output_img = layer_to_rgb(layer_pg(output,
+            #                                    drop_rate=self.drop_rate,
+            #                                    training=training))
 
-            self.output_imgs.append(output_img)
-
+            # TODO: Move args
             output = layer_pg(output,
                               drop_rate=self.drop_rate,
                               batch_norm=self.batch_norm,
                               pixel_norm=self.pixel_norm,
                               training=training)
 
-        return self.output_transitions
+            output_img = layer_to_rgb(output)
+            output_imgs.append(output_img)
+
+        if len(output_imgs) > 1:
+            if wgan_gp:
+                upscaled_imgs = upscale2d(output_imgs[-2])
+            else:
+                upscaled_imgs = self.resize([output_imgs[-2], output_imgs[-1]])
+            return self.transition([output_imgs[-1], upscaled_imgs, alpha])
+        else:
+            return output_imgs[-1]
 
 
 class EncoderPG(models.Model):
@@ -289,77 +285,92 @@ class EncoderPG(models.Model):
         self.output_act = output_act
         self.latent_size = latent_size
         self.output_units = output_units or []
-        self.use_wscale = use_wscale
+
+        self.concat = layers.Lambda(lambda x: tf.concat(x, axis=-1), name='concatenate')
+        self.transition = layers.Lambda(lambda x: (x[0] - x[1]) * x[2] + x[1])
+        self.resize = layers.Lambda(lambda args: tf.image.resize_bilinear(args[0], args[1].shape[1:3],
+                                                                          align_corners=True))
+        self.mb_std = MinibatchStdev()
 
         # Collect all layers into the list
-        self.layers_from_rgb = []
-        self.layers_pg = []
-        for train_stage in train_stages[::-1]:
+        self.layers_pg, self.layers_from_rgb = [], []
+        for train_stage in train_stages:
             filters = train_stage['size'][-1]
 
             layer_from_rgb = layers.Conv2D(filters=filters,
-                                           kernel_size=4,
+                                           kernel_size=1,
                                            padding='same',
                                            activation=act,
-                                           kernel_initializer=initializer,
-                                           # name='from_rgb',
-                                           )
+                                           kernel_initializer=initializer)
 
             self.layers_from_rgb.append(layer_from_rgb)
 
-            layer_pg = LayerPG(layers.Conv2D, filters, 4, act=act, scale=0.5)
+            layer_pg = LayerPG(layers.Conv2D, filters, 3, act=act, scale=0.5)
             self.layers_pg.append(layer_pg)
 
-        self.mb_std = MinibatchStdev()
-        self.tile = None
+        self.tile = layers.Lambda(lambda x: tf.tile(
+            x[:, None, None], [1, train_stages[0]['size'][0], train_stages[0]['size'][1], 1]), name='tile')
         self.concat = layers.Concatenate()
-        self.conv = None
+        self.conv_0 = layers.Conv2D(filters=train_stages[0]['size'][-1],
+                                    kernel_size=3,
+                                    activation=self.act,
+                                    padding='same',
+                                    kernel_initializer=initializer)
+        self.drop = layers.Dropout(rate=self.drop_rate)
+        self.conv_1 = layers.Conv2D(filters=train_stages[0]['size'][-1],
+                                    kernel_size=train_stages[0]['size'][0],
+                                    activation=self.act,
+                                    kernel_initializer=initializer)
         self.flat = layers.Flatten()
         self.dense_list = [layers.Dense(units,
                                         activation=self.output_act,
-                                        kernel_initializer=initializer) for units in
-                           list(self.output_units)]
+                                        kernel_initializer=initializer) for units in list(self.output_units)]
 
-    def call(self, inputs, alpha=1.0, training=None):
-        if isinstance(inputs, (list, tuple)):
-            input_imgs, labels_emb = inputs
+    def call(self, inputs, stage=-1, alpha=1.0, training=None):
+        if stage < 0:
+            stage = len(self.train_stages) + stage
+
+        if not isinstance(inputs, (list, tuple)):
+            inputs = [inputs]
+
+        if len(inputs) == 1:
+            input_imgs, labels_emb = inputs[0], None
         else:
-            input_imgs, labels_emb = inputs, None
+            input_imgs, labels_emb = inputs
 
-        output, output_large = self._from_rgb(input_imgs), input_imgs
+        output, img_large = self.layers_from_rgb[stage](input_imgs), input_imgs
 
         output = self.mb_std(output)
 
-        self.output_logits = []
-        ptr = self._get_input_layer_ptr(output)
-        for layer_pg in self.layers_pg[ptr:]:
+        flag_trans = False
+        for layer_pg in self.layers_pg[:stage][::-1]:
             output = layer_pg(output,
                               drop_rate=self.drop_rate,
                               batch_norm=self.batch_norm,
                               pixel_norm=self.pixel_norm,
                               training=training)
 
+            if near:
+              downscaled_imgs = downscale2d(img_large)
+            else:
+              downscaled_imgs = self.resize([img_large, output])
+            downscaled_from_rgb = self.layers_from_rgb[stage - 1](downscaled_imgs)
             # Smooth transition between inputs
-            if output_large is not None and training:
-                downscaled_imgs = tf.image.resize_bilinear(output_large, output.shape[1:3], align_corners=True)
-                downscaled_from_rgb = self._from_rgb(downscaled_imgs)
-                output = (output - downscaled_from_rgb) * alpha + downscaled_from_rgb
-                output_large = None
+            if not flag_trans:
+                output = self.transition([output, downscaled_from_rgb, alpha])
+                flag_trans = True
+
+            img_large = downscaled_imgs
+            stage -= 1
+
         # Concatenate output vector with labels embedding vector
         if labels_emb is not None:
-            if not self.tile:
-                self.tile = layers.Lambda(lambda x: tf.tile(
-                    x[:, None, None], [1, output.shape[1], output.shape[2], 1]), name='tile')
             tiled = self.tile(labels_emb)
             output = self.concat([output, tiled])
 
         # Convolution outputs [batch, 1, 1, 1]
-        if not self.conv:
-            self.conv = layers.Conv2D(filters=self.latent_size,
-                                      kernel_size=output.shape.as_list()[1:3],
-                                      activation=self.act,
-                                      kernel_initializer=initializer)
-        output = self.conv(output)
+        output = self.drop(self.conv_0(output))
+        output = self.conv_1(output)
 
         # Squeeze height and width dimensions
         output = self.flat(output)
@@ -368,32 +379,6 @@ class EncoderPG(models.Model):
             output = dense(output)
 
         return output
-
-    def _get_input_layer_ptr(self, inputs):
-        """Returns the reverse index of the input layer position in the layers list"""
-
-        if inputs is None:
-            return 0
-
-        for num, stage in enumerate(self.train_stages):
-            if inputs.shape[1:3] == stage['size'][:-1]:
-                return len(self.layers_pg) - num
-
-        raise ValueError('Inputs shape must be in the `train_stages`')
-
-    def _from_rgb(self, inputs):
-        """Automatically selects the `from_rgb` layer specifically for the given `inputs` tensor
-
-        Args:
-            inputs: A Tensor with images
-
-        Returns:
-            A Keras layer that allows to map the `inputs` tensor with images to features representation
-
-        """
-        ptr = self._get_input_layer_ptr(inputs) - 1
-
-        return self.layers_from_rgb[ptr](inputs)
 
 
 class GAN_PG:
