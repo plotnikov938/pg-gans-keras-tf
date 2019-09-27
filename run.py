@@ -1,5 +1,3 @@
-import argparse
-
 import tensorflow as tf
 import numpy as np
 from matplotlib import pyplot as plt
@@ -24,7 +22,6 @@ def generate(path, stage_nums=None):
     model.load_weights(path)
 
     for stage in stage_nums:
-
         generated_img = model.generate([noise, labels], stage)
 
         plot(generated_img, y_train.shape[-1], labels.shape[-1], title='stage_{}'.format(stage))
@@ -36,20 +33,31 @@ def generate(path, stage_nums=None):
 
 
 if __name__ == "__main__":
-    size = 10
+    import argparse
+    import sys
 
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument('--path_config', type=str, default='./config.py', help='a path to the config.py')
-    parser.add_argument('--show', '-s', action='store_true', help='show generated images')
+    # parser.add_argument('-f', '--filename', type=str, default='{}_{}.png', help='a filename to save generated images')
+    parser.add_argument('-s', '--show', action='store_true', help='show generated images')
+    parser.add_argument('-l', '--label', type=int, default=-1, choices=range(-2, 10, 1),
+                        help='Use this option in case the model was trained conditionally: '
+                             '\n   [0-9] - generate images with selected label '
+                             '\n   -1 (default) - generate images for each label presented '
+                             '\n   -2 - generate randomly labeled images')
     parser.add_argument('--stage_nums', type=int, nargs='*', default=-1,
                         help='defines the stages for which images will be generated')
 
-    args = parser.parse_args('-s --stage_nums -2 -1'.split(' '))
+    if len(sys.argv) == 2:
+        if sys.argv[-1] in ['-h', '--help']:
+            parser.print_help(sys.stderr)
+            sys.exit(1)
+
+    args = parser.parse_args('-s --stage_nums -2 -1 -l -2'.split(' '))
 
     # load config
     config = get_config(args.path_config)
 
-    #TODO: Remove
     if config['dataset'] is 'mnist':
         (X_train, y_train), (X_test, y_test) = tf.keras.datasets.mnist.load_data()
     elif config['dataset'] is 'cifar10':
@@ -61,8 +69,15 @@ if __name__ == "__main__":
     X_train, y_train = preprocess_dataset((X_train, y_train), (X_test, y_test))
     config['channels'] = X_train.shape[-1]
 
+    size = 10
     noise = np.random.normal(size=(y_train.shape[-1] * size, config['latent_size'])).astype(np.float32)
-    labels = np.tile(np.arange(y_train.shape[-1])[:, None], (1, size)).reshape(-1)
+    # Preprocess labels
+    if args.label == -1:
+        labels = np.tile(np.arange(y_train.shape[-1])[:, None], (1, size)).reshape(-1)
+    elif args.label == -2:
+        labels = np.random.randint(0, 9, size=y_train.shape[-1]*size)
+    else:
+        labels = np.ones((y_train.shape[-1]*size))*args.label
     labels = tf.keras.utils.to_categorical(labels, y_train.shape[-1]).astype(np.float32)
 
     config['labels_emb_size'] = y_train.shape[-1] if config['conditional'] else None
