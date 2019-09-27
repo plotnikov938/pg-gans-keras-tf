@@ -683,7 +683,7 @@ class GAN_PG:
 
             fig = plt.figure()
             plt.plot(losses)
-            plt.savefig('{}/{}_{}.jpeg'.format(folder, self.gan_mode, 'losses'))
+            plt.savefig('{}/{}_{}_{}.jpeg'.format(folder, self.gan_mode, 'losses', stage_num))
             plt.close(fig)
 
     def save_weights(self, path, tpu=False):
@@ -693,7 +693,7 @@ class GAN_PG:
             pass
 
         # Since the model is subclassed, we can only save weights with the specified `save_format` argument
-        # But in case of TPUs using this kind of funcionalyty has not yet been implemented, so we have to
+        # But in case of TPUs using this kind of functionality has not yet been implemented, so we have to
         # save our weights differently.
         if tpu:
             # Get all the weights as the list of numpy arrays
