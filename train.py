@@ -3,76 +3,55 @@ import glob
 import argparse
 import warnings
 
-
 import numpy as np
 import tensorflow as tf
 
 from utils import Scheduler, make_gif, empty_context_mgr, get_config
-from dataset import resize_images_tf, preprocess_dataset
+from dataset import preprocess_dataset
 from models import GAN_PG
 
 
 def train():
     tf.keras.backend.clear_session()
+    with strategy.scope() if config['use_tpu'] else empty_context_mgr():
 
-    with strategy.scope() if use_tpu else empty_context_mgr():
+        model = GAN_PG(**config)
 
-        if use_tpu:
-            sess_config = tf.ConfigProto()
-            sess_config.allow_soft_placement = True
-            cluster_spec = resolver.cluster_spec()
-            if cluster_spec:
-                sess_config.cluster_def.CopyFrom(cluster_spec.as_cluster_def())
-        else:
-            sess_config = None
+        # Define optimizers
+        optimizer_g = tf.train.AdamOptimizer(learning_rate=config['learning_rate'], beta1=0.0)
+        optimizer_d = tf.train.AdamOptimizer(learning_rate=config['learning_rate'], beta1=0.0)
 
-        model = GAN_PG(train_stages, channels, latent_size=latent_size, use_wscale=use_wscale, labels_emb_size=labels_emb_size, gan_mode=gan_mode,
-                       mixup_alpha=mixup,
-                       drop_rate=drop_rate, batch_norm=batch_norm, pixel_norm=pixel_norm, dis_train_iters=dis_train_iters,
-                       gen_train_iters=gen_train_iters, buffer_size=buffer_size, buffer_epoch_depth=buffer_epoch_depth)
+        # Compile the model
+        model.compile_model(optimizer_g=optimizer_g, optimizer_d=optimizer_d, loss=config['gan_mode'],
+                            tpu_strategy=strategy, resolver=resolver, config=config['sess_config'])
+
+        if config['restore']:
+            model.load_weights('{}/weights'.format(config['folder']), tpu=config['use_tpu'])
+
+        # Prepare inputs
+        inputs = (X_train, y_train) if config['conditional'] else X_train
 
         # Train
-        for stage in train_stages:
+        for stage in config['train_stages']:
             # Get training stage num
-            stage_num = train_stages.index(stage)
+            stage_num = config['train_stages'].index(stage)
 
-            print('\nProcessing stage: {}  with the size {} =========================================='.format(
+            print('\nProcessing stage: {}  with image size {} =========================================='.format(
                 stage_num, stage['size']))
-
-            model(stage_num, training=True, tpu_strategy=strategy, resolver=resolver, config=sess_config)
-
-            # TODO: Restore the model
-            if restore:
-                model.load_weights('{}/weights'.format(folder))
-                print('The model has been sucsessfully restored!')
-
-            # Compile the model
-            optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate, beta1=0.5)
-            model.compile_model(optimizer=optimizer, loss=gan_mode)
-
-            # Resize train samples to the specifed stage size
-            Images_train = resize_images_tf(X_train, stage["size"][:-1], sess=model.sess)
 
             # Define schedulers
             alpha_scheduler = Scheduler(stage['train_epochs'], [0, 0.5], [0, 1.0])
             learning_rate_scheduler = None
 
-            try:
-                os.makedirs(folder)
-            except FileExistsError:
-                pass
+            model.fit_stage(inputs, config['batch_size'], stage_num=stage_num,
+                            alpha_scheduler=alpha_scheduler,
+                            learning_rate_scheduler=learning_rate_scheduler,
+                            folder=config['folder'], save_epoch=config['save_epoch'],
+                            seed_noise=seed_noise, seed_labels=seed_labels
+                            )
 
-            # Train the model for the train_stage
-            inputs = (Images_train, y_train) if conditional else Images_train
-            model.train_model(inputs, batch_size,
-                              alpha_scheduler=alpha_scheduler,
-                              learning_rate_scheduler=learning_rate_scheduler,
-                              folder_name='{}/{}'.format(folder, stage_num), SAVE_EPOCH=5, seed_noise=seed_noise,
-                              seed_labels=seed_labels
-                              )
-
-    make_gif(glob.iglob('{}/progress/*.png'.format(folder)),
-             '{}/{}_{}.gif'.format(folder, gan_mode, 'progress'))
+    make_gif(glob.iglob('{}/progress/*.png'.format(config['folder'])),
+             '{}/{}_{}.gif'.format(config['folder'], config['gan_mode'], 'progress'))
 
 
 if __name__ == "__main__":
@@ -84,6 +63,16 @@ if __name__ == "__main__":
     # load config
     config = get_config(args.path_config)
 
+    # Create the folder to save the training progress
+    try:
+        os.makedirs(config['folder'])
+    except FileExistsError:
+        pass
+    try:
+        os.makedirs(config['folder'] + '/progress')
+    except FileExistsError:
+        pass
+
     # Load the dataset
     if config['dataset'] is 'mnist':
         (X_train, y_train), (X_test, y_test) = tf.keras.datasets.mnist.load_data()
@@ -94,7 +83,7 @@ if __name__ == "__main__":
         raise NotImplementedError("Load your custom dataset here")
 
     X_train, y_train = preprocess_dataset((X_train, y_train), (X_test, y_test))
-    channels = X_train.shape[-1]
+    config['channels'] = X_train.shape[-1]
 
     labels_emb_size = y_train.shape[-1] if config['conditional'] else None
 
@@ -102,8 +91,6 @@ if __name__ == "__main__":
     seed_noise = np.random.normal(size=(y_train.shape[-1] * 10, config['latent_size'])).astype(np.float32)
     seed_labels = np.tile(np.arange(y_train.shape[-1])[:, None], (1, 10)).reshape(-1)
     seed_labels = tf.keras.utils.to_categorical(seed_labels, y_train.shape[-1]).astype(np.float32)
-
-    use_buffer = bool(config['buffer_size'])
 
     if config['use_tpu']:
         if config['buffer_size']:
