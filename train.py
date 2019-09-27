@@ -26,7 +26,7 @@ def train():
                             tpu_strategy=strategy, resolver=resolver, config=config['sess_config'])
 
         if config['restore']:
-            model.load_weights('{}/weights'.format(config['folder']), tpu=config['use_tpu'])
+            model.load_weights('{}/weights'.format(config['folder']))
 
         # Prepare inputs
         inputs = (X_train, y_train) if config['conditional'] else X_train

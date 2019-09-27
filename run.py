@@ -21,7 +21,7 @@ def generate(path, stage_nums=None):
     model.sess.run(tf.global_variables_initializer())
 
     # Restore the weights
-    model.load_weights(path, tpu=config['use_tpu'])
+    model.load_weights(path)
 
     for stage in stage_nums:
 

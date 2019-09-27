@@ -686,7 +686,7 @@ class GAN_PG:
             plt.savefig('{}/{}_{}_{}.jpeg'.format(folder, self.gan_mode, 'losses', stage_num))
             plt.close(fig)
 
-    def save_weights(self, path, tpu=False):
+    def save_weights(self, path):
         try:
             os.makedirs(path)
         except FileExistsError:
@@ -694,53 +694,39 @@ class GAN_PG:
 
         # Since the model is subclassed, we can only save weights with the specified `save_format` argument
         # But in case of TPUs using this kind of functionality has not yet been implemented, so we have to
-        # save our weights differently.
-        if tpu:
-            # Get all the weights as the list of numpy arrays
-            arrays = [var.values[0].eval(self.sess) for var in self.generator.trainable_variables] # .values[0]
-            # And save them as one file
-            np.savez('{}/generator'.format(path), arrays)
+        # save our weights as a numpy array.
 
-            # The same goes for the discriminator
-            arrays = [var.values[0].eval(self.sess) for var in self.discriminator.trainable_variables]
-            np.savez('{}/discriminator'.format(path), arrays)
-        else:
-            self.generator.save_weights('{}/generator'.format(path))
-            self.discriminator.save_weights('{}/discriminator'.format(path))
+        # Get all the weights as the list of numpy arrays
+        arrays = [var.values[0].eval(self.sess) for var in self.generator.trainable_variables] # .values[0]
+        # And save them as one file
+        np.savez('{}/generator'.format(path), arrays)
 
-    def load_weights(self, path, tpu=False):
+        # The same goes for the discriminator
+        arrays = [var.values[0].eval(self.sess) for var in self.discriminator.trainable_variables]
+        np.savez('{}/discriminator'.format(path), arrays)
+
+    def load_weights(self, path):
         # In case of using TPUs we have to load numpy arrays with weights and
         # reassining them to the corresponding tensors
-        if tpu:
-            try:
-                arrays = np.load('{}/generator.npz'.format(path), allow_pickle=True)
-                for weight, tensor in zip(arrays['arr_0'], self.generator.trainable_weights):
-                    print(weight.shape, tensor.shape)
-                    self.sess.run(tensor.assign(weight))
+        try:
+            arrays = np.load('{}/generator.npz'.format(path), allow_pickle=True)
+            for weight, tensor in zip(arrays['arr_0'], self.generator.trainable_weights):
+                print(weight.shape, tensor.shape)
+                self.sess.run(tensor.assign(weight))
 
-            except FileNotFoundError:
-                print("Generator weights cannot be restored")
-            except ValueError:
-                print("Generator weights loading error:",
-                      weight.shape, tensor.shape)
+        except FileNotFoundError:
+            print("Generator weights cannot be restored")
+        except ValueError:
+            print("Generator weights loading error:",
+                  weight.shape, tensor.shape)
 
-            try:
-                arrays = np.load('{}/discriminator.npz'.format(path), allow_pickle=True)
-                for weight, tensor in zip(arrays['arr_0'], self.discriminator.trainable_weights):
-                    self.sess.run(tensor.assign(weight))
+        try:
+            arrays = np.load('{}/discriminator.npz'.format(path), allow_pickle=True)
+            for weight, tensor in zip(arrays['arr_0'], self.discriminator.trainable_weights):
+                self.sess.run(tensor.assign(weight))
 
-            except FileNotFoundError:
-                print("Discriminator weights cannot be restored")
-            except ValueError:
-                print("Discriminator weights loading error:",
-                      weight.shape, tensor.shape)
-
-        else:
-            try:
-                self.generator.load_weights('{}/generator'.format(path))
-            except:
-                print("Generator weights cannot be restored")
-            try:
-                self.discriminator.load_weights('{}/discriminator'.format(path))
-            except:
-                print("Discriminator weights cannot be restored")
+        except FileNotFoundError:
+            print("Discriminator weights cannot be restored")
+        except ValueError:
+            print("Discriminator weights loading error:",
+                  weight.shape, tensor.shape)
