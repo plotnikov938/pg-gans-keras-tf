@@ -28,7 +28,11 @@ def generate(path, stage_nums=None):
 
         plot(generated_img, y_train.shape[-1], labels.shape[-1], title='stage_{}'.format(stage))
 
-        plt.savefig('{}/results/{}_{}.png'.format(config['folder'], stage, config['gan_mode']), bbox_inches='tight')
+        path = '{}/results/' + args.filename
+        try:
+            plt.savefig(path.format(config['folder'], stage, config['gan_mode']), bbox_inches='tight')
+        except:
+            plt.savefig(path.format(config['folder']), bbox_inches='tight')
 
         if args.show:
             plt.show()
@@ -40,7 +44,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument('--path_config', type=str, default='./config.py', help='a path to the config.py')
-    # parser.add_argument('-f', '--filename', type=str, default='{}_{}.png', help='a filename to save generated images')
+    parser.add_argument('-f', '--filename', type=str, default='{}_{}.png', help='a filename to save generated images')
     parser.add_argument('-s', '--show', action='store_true', help='show generated images')
     parser.add_argument('-l', '--label', type=int, default=-1, choices=range(-2, 10, 1),
                         help='Use this option in case the model was trained conditionally: '
