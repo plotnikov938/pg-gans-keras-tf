@@ -9,41 +9,47 @@ from models import GAN_PG, plot
 from dataset import preprocess_dataset
 
 
-def generate(path, stage_num=None):
+def generate(path, stage_nums=None):
+    stage_nums = [stage_nums] if not isinstance(stage_nums, (tuple, list)) else stage_nums
+
+    tf.keras.backend.clear_session()
 
     model = GAN_PG(**config)
 
-    model(stage_num or -1, training=False)
-    model.load_weights(path)
+    model.compile_model()
 
-    results = model.generator([noise, labels], training=False)
-    results = results if stage_num is None else [results[stage_num]]
-    for img in results:
-        res = model.sess.run(img)
-        plot(res, y_train.shape[-1], 10, title='results_{}'.format(stage_num or len(results)))
+    model.sess.run(tf.global_variables_initializer())
 
-        plt.savefig('{}/results/{}_{}.png'.format(config['folder'], stage_num, config['gan_mode']), bbox_inches='tight')
+    # Restore the weights
+    model.load_weights(path, tpu=config['use_tpu'])
 
-        if show:
+    for stage in stage_nums:
+
+        generated_img = model.generate([noise, labels], stage)
+
+        plot(generated_img, y_train.shape[-1], labels.shape[-1], title='stage_{}'.format(stage))
+
+        plt.savefig('{}/results/{}_{}.png'.format(config['folder'], stage, config['gan_mode']), bbox_inches='tight')
+
+        if args.show:
             plt.show()
 
 
 if __name__ == "__main__":
     size = 10
-    show = True
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--path_config', type=str, default='./config.py', help='a path to the config.py')
-    parser.add_argument('--dataset', type=str, default='cifar10',
-                        help='a dataset which the model will be trained on')
+    parser.add_argument('--show', '-s', action='store_true', help='show generated images')
+    parser.add_argument('--stage_nums', type=int, nargs='*', default=-1,
+                        help='defines the stages for which images will be generated')
 
-    args = parser.parse_args()
+    args = parser.parse_args('-s --stage_nums -2 -1'.split(' '))
 
     # load config
     config = get_config(args.path_config)
 
     #TODO: Remove
-    # Load the dataset
     if config['dataset'] is 'mnist':
         (X_train, y_train), (X_test, y_test) = tf.keras.datasets.mnist.load_data()
     elif config['dataset'] is 'cifar10':
@@ -61,6 +67,6 @@ if __name__ == "__main__":
 
     config['labels_emb_size'] = y_train.shape[-1] if config['conditional'] else None
 
-    generate('{}/weights'.format(config['folder']))
+    generate('{}/weights'.format(config['folder']), args.stage_nums)
 
     print('Generation done!')
