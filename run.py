@@ -21,8 +21,10 @@ def generate(path, stage_nums=None):
     # Restore the weights
     model.load_weights(path)
 
+    inputs = [noise, labels] if config["conditional"] is True else noise
+
     for stage in stage_nums:
-        generated_img = model.generate([noise, labels], stage)
+        generated_img = model.generate(inputs, stage)
 
         plot(generated_img, y_train.shape[-1], labels.shape[-1], title='stage_{}'.format(stage))
 
