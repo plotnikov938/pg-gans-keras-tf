@@ -304,7 +304,7 @@ class EncoderPG(models.Model):
 
             self.layers_from_rgb.append(layer_from_rgb)
 
-            layer_pg = LayerPG(layers.Conv2D, filters, 3, act=act, scale=0.5)
+            layer_pg = LayerPG(layers.Conv2D, filters, 4, act=act, scale=0.5)
             self.layers_pg.append(layer_pg)
 
         self.tile = layers.Lambda(lambda x: tf.tile(
