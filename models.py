@@ -116,7 +116,8 @@ class LayerPG(layers.Layer):
                              activation=act,
                              kernel_initializer=initializer)
 
-        self.bn = layers.BatchNormalization()
+        self.bn_0 = layers.BatchNormalization()
+        self.bn_1 = layers.BatchNormalization()
         self.pn = PixelNormalization()
 
     def build(self, input_shapes):
@@ -147,7 +148,7 @@ class LayerPG(layers.Layer):
             outputs = self.layer_0_0(inputs)
 
             if batch_norm:
-                outputs = self.bn(outputs, training=training)
+                outputs = self.bn_0(outputs, training=training)
 
             if pixel_norm:
                 inputs = self.pn(outputs)
@@ -155,7 +156,7 @@ class LayerPG(layers.Layer):
         outputs = self.layer_0(inputs)
 
         if batch_norm:
-            outputs = self.bn(outputs, training=training)
+            outputs = self.bn_1(outputs, training=training)
 
         if pixel_norm:
             outputs = self.pn(outputs)
@@ -441,7 +442,6 @@ class GAN_PG:
             self.get_loss = lambda real_logits, fake_logits, **kwargs: loss(real_logits, fake_logits)
 
         # A tricky way to set up the learning rate on the fly during training with `learning_rate_scheduler`
-        # TODO: opt_g, opt_d
         try:
             self._lr = self.optimizer_g._lr
             self.learning_rate = tf.keras.backend.variable(self._lr, name='learning_rate')
@@ -698,7 +698,7 @@ class GAN_PG:
         # save our weights as a numpy array.
 
         # Get all the weights as the list of numpy arrays
-        arrays = [var.values[0].eval(self.sess) for var in self.generator.trainable_variables] # .values[0]
+        arrays = [var.values[0].eval(self.sess) for var in self.generator.trainable_variables]  # .values[0]
         # And save them as one file
         np.savez('{}/generator'.format(path), arrays)
 
