@@ -96,7 +96,7 @@ class MinibatchStdev(layers.Layer):
 
 
 class LayerPG(layers.Layer):
-    def __init__(self, layer, filters, kernel_size, padding='same', strides=(1, 1), act=None, scale=1., **kwargs):
+    def __init__(self, layer, filters, kernel_size, padding='same', strides=(1, 1), drop_rate=0.0, act=None, scale=1., **kwargs):
 
         super(LayerPG, self).__init__(**kwargs)
 
@@ -104,9 +104,10 @@ class LayerPG(layers.Layer):
         self.layer = layer
         self.scale = scale
         self.kernel_size = kernel_size
+        self.drop_rate = drop_rate
         self.act = act
 
-        self.drop = layers.Dropout(rate=0.0)
+        self.drop = layers.Dropout(rate=drop_rate)
 
         self.layer_0 = layer(filters=filters,
                              kernel_size=kernel_size,
@@ -126,7 +127,7 @@ class LayerPG(layers.Layer):
                                     activation=self.act,
                                     kernel_initializer=initializer)
 
-    def call(self, inputs, drop_rate=0.0, batch_norm=None, pixel_norm=None, training=None, **kwargs):
+    def call(self, inputs, batch_norm=None, pixel_norm=None, training=None, **kwargs):
 
         # Upscale the images
         if self.scale > 1:
@@ -140,8 +141,6 @@ class LayerPG(layers.Layer):
                                                   align_corners=True)
 
         # Apply dropout here
-        self.drop.rate = drop_rate
-
         inputs = self.drop(inputs, training=training)
 
         if True:
@@ -205,10 +204,12 @@ class DecoderPG(models.Model):
             filters = train_stage['size'][-1]
             if not self.layers_pg:
                 layer_pg = LayerPG(layers.Conv2DTranspose, filters, train_stage['size'][0],
-                                   padding='valid', act=self.act, scale=1)
+                                   padding='valid',
+                                   drop_rate=self.drop_rate, act=self.act, scale=1)
             else:
                 layer_pg = LayerPG(layers.Conv2D, filters, 4,
-                                   padding='same', act=self.act, scale=2)
+                                   padding='same',
+                                   drop_rate=self.drop_rate, act=self.act, scale=2)
 
             # Create rgb img for each output
             layer_to_rgb = layers.Conv2D(channels, 1,
@@ -253,7 +254,6 @@ class DecoderPG(models.Model):
 
             # TODO: Move args
             output = layer_pg(output,
-                              drop_rate=self.drop_rate,
                               batch_norm=self.batch_norm,
                               pixel_norm=self.pixel_norm,
                               training=training)
@@ -304,7 +304,8 @@ class EncoderPG(models.Model):
 
             self.layers_from_rgb.append(layer_from_rgb)
 
-            layer_pg = LayerPG(layers.Conv2D, filters, 4, act=act, scale=0.5)
+            layer_pg = LayerPG(layers.Conv2D, filters, 4, drop_rate=self.drop_rate,
+                               act=act, scale=0.5)
             self.layers_pg.append(layer_pg)
 
         self.tile = layers.Lambda(lambda x: tf.tile(
@@ -344,7 +345,6 @@ class EncoderPG(models.Model):
         flag_trans = False
         for layer_pg in self.layers_pg[:stage][::-1]:
             output = layer_pg(output,
-                              drop_rate=self.drop_rate,
                               batch_norm=self.batch_norm,
                               pixel_norm=self.pixel_norm,
                               training=training)
@@ -353,6 +353,7 @@ class EncoderPG(models.Model):
               downscaled_imgs = downscale2d(img_large)
             else:
               downscaled_imgs = self.resize([img_large, output])
+
             downscaled_from_rgb = self.layers_from_rgb[stage - 1](downscaled_imgs)
             # Smooth transition between inputs
             if not flag_trans:
