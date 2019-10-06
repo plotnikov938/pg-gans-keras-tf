@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 
 from adversarials import AdversarialLosses
 from dataset import Buffer, resize_images_tf
-from utils import mixup_func, PixelNormalization
+from utils import mixup_func, PixelNormalization, plot
 
 
 # TODO: Remove later
@@ -18,36 +18,12 @@ initializer = 'he_normal'
 wgan_gp = False
 
 
-# TODO: Move to the utils.py
-def plot(samples, rows, cols, title=None):
-    samples = samples[:rows*cols]
-
-    img_size = samples.shape[1]
-    channels = samples.shape[-1]
-
-    reshaped = (samples.reshape(rows, cols, img_size, img_size, channels)
-                .transpose(0, 2, 1, 3, 4)
-                .reshape(rows * img_size, cols * img_size, channels))
-
-    reshaped = np.clip(reshaped, -1, 1)
-
-    fig = plt.figure(figsize=(cols, rows))
-    if reshaped.shape[-1] == 1:
-        plt.imshow(np.squeeze(reshaped), cmap='Greys_r',
-                   interpolation='nearest')
-    else:
-        plt.imshow(reshaped * 0.5 + 0.5,
-                   interpolation='nearest')
-
-    plt.title(title)
-    plt.axis('off')
-
-    return fig
-
-
 def upscale2d(x, factor=2):
     assert isinstance(factor, int) and factor >= 1
-    if factor == 1: return x
+
+    if factor == 1:
+        return x
+
     with tf.variable_scope('Upscale2D'):
         s = x.shape
         x = tf.reshape(x, [-1, s[1], 1, s[2], 1, s[3]])
@@ -58,11 +34,14 @@ def upscale2d(x, factor=2):
 
 def downscale2d(x, factor=2):
     assert isinstance(factor, int) and factor >= 1
-    if factor == 1: return x
+
+    if factor == 1:
+        return x
+
     with tf.variable_scope('Downscale2D'):
         ksize = [1, factor, factor, 1]
         return tf.nn.avg_pool2d(x, ksize=ksize, strides=ksize, padding='VALID',
-                                data_format='NHWC')  # NOTE: requires tf_config['graph_options.place_pruned_graph'] =
+                                data_format='NHWC')
 
 
 class MinibatchStdev(layers.Layer):

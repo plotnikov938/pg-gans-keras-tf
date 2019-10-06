@@ -4,7 +4,34 @@ import importlib
 import numpy as np
 import tensorflow as tf
 import tensorflow_probability.python.distributions as tfd
+import matplotlib.pyplot as plt
 import imageio
+
+
+def plot(samples, rows, cols, title=None):
+    samples = samples[:rows*cols]
+
+    img_size = samples.shape[1]
+    channels = samples.shape[-1]
+
+    reshaped = (samples.reshape(rows, cols, img_size, img_size, channels)
+                .transpose(0, 2, 1, 3, 4)
+                .reshape(rows * img_size, cols * img_size, channels))
+
+    reshaped = np.clip(reshaped, -1, 1)
+
+    fig = plt.figure(figsize=(cols, rows))
+    if reshaped.shape[-1] == 1:
+        plt.imshow(np.squeeze(reshaped), cmap='Greys_r',
+                   interpolation='nearest')
+    else:
+        plt.imshow(reshaped * 0.5 + 0.5,
+                   interpolation='nearest')
+
+    plt.title(title)
+    plt.axis('off')
+
+    return fig
 
 
 def get_config(path):
