@@ -1,0 +1,6 @@
+imageio==2.5.0
+matplotlib==2.2.3
+pandas==0.24.2
+numpy==1.16.3
+tensorflow_probability==0.7.0
+tensorflow==1.14.0
