@@ -663,7 +663,7 @@ class GAN_PG:
 
             fig = plt.figure()
             plt.plot(losses)
-            plt.savefig('{}/{}_{}_{}.jpeg'.format(folder, self.gan_mode, 'losses', stage_num))
+            plt.savefig('{}/losses/{}_{}_{}.jpeg'.format(folder, self.gan_mode, 'losses', stage_num))
             plt.close(fig)
 
     def save_weights(self, path):
