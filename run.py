@@ -59,7 +59,7 @@ if __name__ == "__main__":
             parser.print_help(sys.stderr)
             sys.exit(1)
 
-    args = parser.parse_args('-s --stage_nums -2 -1 -l -2'.split(' '))
+    args = parser.parse_args()
 
     # load config
     config = get_config(args.path_config)

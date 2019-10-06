@@ -673,6 +673,8 @@ class Buffer(Dataset):
 
 if __name__ == "__main__":
     # TODO: Argpars
+    raise NotImplementedError
+
     folder = 'dataset/'
     save_to = 'dataset/'
     new_size = (128, 128)

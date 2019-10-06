@@ -18,7 +18,7 @@ def load():
     restore = False  # Restore a pre-trained model, if one exists
     sess_config = None  # Configure here tensorflow session if necessary
 
-    gan_mode = 'ra-gan'  # See `adversarials.py` for more information
+    gan_mode = 'gan'  # See `adversarials.py` for more information
     conditional = True
     latent_size = 256
     use_wscale = False

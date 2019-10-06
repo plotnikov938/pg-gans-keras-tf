@@ -232,7 +232,6 @@ class DecoderPG(models.Model):
             #                                    drop_rate=self.drop_rate,
             #                                    training=training))
 
-            # TODO: Move args
             output = layer_pg(output,
                               batch_norm=self.batch_norm,
                               pixel_norm=self.pixel_norm,
@@ -557,7 +556,6 @@ class GAN_PG:
         return tf.data.Dataset.from_generator(lambda: self.buffer.shuffle().repeat(), buffer_dtypes,
                                               output_shapes=input_shapes)
 
-    # TODO: Remove folder name
     def fit_stage(self, x, batch_size, stage_num=-1, alpha_scheduler=None, learning_rate_scheduler=None, folder=None,
                     save_epoch=1, seed_noise=None, seed_labels=None):
         assert self.optimizer_g  # You must first compile the model
@@ -691,7 +689,6 @@ class GAN_PG:
         try:
             arrays = np.load('{}/generator.npz'.format(path), allow_pickle=True)
             for weight, tensor in zip(arrays['arr_0'], self.generator.trainable_weights):
-                print(weight.shape, tensor.shape)
                 self.sess.run(tensor.assign(weight))
 
         except FileNotFoundError:
