@@ -6,10 +6,10 @@ def load():
     """A function returns dict with the configured parameters"""
 
     train_stages = [
-        {'size': (4, 4, 256), 'train_epochs': 50, 'num': 0},
-        {'size': (8, 8, 256), 'train_epochs': 150, 'num': 1},
-        {'size': (16, 16, 256), 'train_epochs': 200, 'num': 2},
-        {'size': (32, 32, 128), 'train_epochs': 300, 'num': 3},
+        {'size': (4, 4, 256), 'train_epochs': 50, 'num': 0, 'lr': 0.0002},
+        {'size': (8, 8, 256), 'train_epochs': 150, 'num': 1, 'lr': 0.0002},
+        {'size': (16, 16, 256), 'train_epochs': 200, 'num': 2, 'lr': 0.0002},
+        {'size': (32, 32, 128), 'train_epochs': 300, 'num': 3, 'lr': 0.0001},
     ]
 
     use_tpu = True

@@ -41,7 +41,7 @@ def train():
 
             # Define schedulers
             alpha_scheduler = Scheduler(stage['train_epochs'], [0, 0.5], [0, 1.0])
-            learning_rate_scheduler = None
+            learning_rate_scheduler = Scheduler(stage['train_epochs'], [0, 0.5], [stage['lr']*0.1, stage['lr']])
 
             model.fit_stage(inputs, config['batch_size'], stage_num=stage_num,
                             alpha_scheduler=alpha_scheduler,
@@ -51,7 +51,7 @@ def train():
                             )
 
     make_gif(glob.iglob('{}/progress/*.png'.format(config['folder'])),
-             '{}/{}_{}.gif'.format(config['folder'], config['gan_mode'], 'progress'))
+             '{}/progress/{}_{}.gif'.format(config['folder'], config['gan_mode'], 'progress'))
 
 
 if __name__ == "__main__":
