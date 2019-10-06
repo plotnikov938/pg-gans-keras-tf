@@ -1,4 +1,5 @@
 import os
+import sys
 import glob
 import argparse
 import warnings
@@ -57,6 +58,11 @@ def train():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--path_config', type=str, default='./config.py', help='a path to the config.py')
+
+    if len(sys.argv) == 2:
+        if sys.argv[-1] in ['-h', '--help']:
+            parser.print_help(sys.stderr)
+            sys.exit(1)
 
     args = parser.parse_args()
 
