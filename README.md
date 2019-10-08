@@ -9,9 +9,9 @@ and even [improving the accuracy](https://arxiv.org/abs/1811.12231) of the image
 The code is tested on [cifar-10](https://www.cs.toronto.edu/~kriz/cifar.html) dataset. 
 
 ---
-This project is the part of a datascience portfolio. Other projects can be found here:
-* [Implementation of PPO algorithm for reinforcement learning with Keras + tensorflow](link1)
-* [Text classification using CapsNet and multihead relative attention with Keras + tensorflow](link2)
+This project is the part of the datascience portfolio. Other projects can be found here:
+* [Implementation of PPO algorithm for reinforcement learning with Keras + tensorflow](https://github.com/plotnikov938/ppo_keras_tf)
+* [Text classification using CapsNet and multihead relative attention with Keras + tensorflow](https://github.com/plotnikov938/txt_class_keras_tf)
 ---
 
 ## Table of Contents
@@ -44,7 +44,7 @@ Make sure you use Python 3.
 
 Clone this repo to your local machine
 ```
-$ git clone https://github.com/myrepo/pg_gans_keras_tf
+$ git clone https://github.com/plotnikov938/pg_gans_keras_tf.git
 ```
 Go into the project directory
 ```
@@ -149,7 +149,7 @@ document.getElementById('img_results').src=link + this.value;">
     <img id="img_results" src="results/3_gan.png" width="640" name="results" />
 </p>
 
-##Resources
+## Resources
 1. [Generative Adversarial Networks](https://arxiv.org/abs/1406.2661)
 2. [Progressive Growing of GANs for Improved Quality, Stability, and Variation](https://arxiv.org/abs/1710.10196)
 3. [mixup: Beyond Empirical Risk Minimization](https://arxiv.org/abs/1710.09412)
