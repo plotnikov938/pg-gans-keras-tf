@@ -77,23 +77,51 @@ The code is tested on [cifar-10](https://www.cs.toronto.edu/~kriz/cifar.html) da
     <img id="img_progress" src="progress/gan_progress.gif" width="640" name="progress" />
 </p>
 
-### Losses    
+### Losses  
+  
+<details>
+<summary>Stage 0</summary>
 
-<label for="stage-select">Choose a training stage:</label>
+<p align="center"> The loss plot for training stage 0</p>
 
-<select id="stage-select" onchange="var link = 'losses/gan_losses_';
-document.getElementById('img_losses').src=link + this.value;">
-    <option value="0.jpg">Stage 1</option>
-    <option value="1.jpg">Stage 2</option>
-    <option value="2.jpg">Stage 3</option>
-    <option selected value="3.jpg">Stage 4</option>
-</select>
+<p align="center">
+    <img id="img_losses" src="losses/gan_losses_0.jpg" width="640" name="losses" />
+</p>
 
-<p align="center"> The loss plot for the selected training stage</p>
+</details>
+  
+<details>
+<summary>Stage 1</summary>
+
+<p align="center"> The loss plot for training stage 1</p>
+
+<p align="center">
+    <img id="img_losses" src="losses/gan_losses_1.jpg" width="640" name="losses" />
+</p>
+
+</details>
+  
+<details>
+<summary>Stage 2</summary>
+
+<p align="center"> The loss plot for training stage 2</p>
+
+<p align="center">
+    <img id="img_losses" src="losses/gan_losses_2.jpg" width="640" name="losses" />
+</p>
+
+</details>
+  
+<details open>
+<summary>Stage 3</summary>
+
+<p align="center"> The loss plot for training stage 3</p>
 
 <p align="center">
     <img id="img_losses" src="losses/gan_losses_3.jpg" width="640" name="losses" />
 </p>
+
+</details>
 
 ## Usage
 ```
@@ -133,21 +161,50 @@ $ python3 run.py --show --stage_nums 0 1 2 3
 ```
 
 ## Results
-<label for="stage-select2">Choose a training stage:</label>
+  
+<details>
+<summary>Stage 0</summary>
 
-<select id="stage-select2" onchange="var link = 'results/';
-document.getElementById('img_results').src=link + this.value;">
-    <option value="0_gan.png">Stage 1</option>
-    <option value="1_gan.png">Stage 2</option>
-    <option value="2_gan.png">Stage 3</option>
-    <option selected value="3_gan.png">Stage 4</option>
-</select>
+<p align="center"> The generated images for training stage 0</p>
 
-<p align="center"> The generated images for the selected training stage</p>
+<p align="center">
+    <img id="img_results" src="results/0_gan.png" width="640" name="results" />
+</p>
+
+</details>
+  
+<details>
+<summary>Stage 1</summary>
+
+<p align="center"> The generated images for training stage 1</p>
+
+<p align="center">
+    <img id="img_results" src="results/1_gan.png" width="640" name="results" />
+</p>
+
+</details>
+  
+<details>
+<summary>Stage 2</summary>
+
+<p align="center"> The generated images for training stage 2</p>
+
+<p align="center">
+    <img id="img_results" src="results/2_gan.png" width="640" name="results" />
+</p>
+
+</details>
+  
+<details>
+<summary>Stage 3</summary>
+
+<p align="center"> The generated images for training stage 3</p>
 
 <p align="center">
     <img id="img_results" src="results/3_gan.png" width="640" name="results" />
 </p>
+
+</details>
 
 ## Resources
 1. [Generative Adversarial Networks](https://arxiv.org/abs/1406.2661)
