@@ -85,7 +85,7 @@ The code is tested on [cifar-10](https://www.cs.toronto.edu/~kriz/cifar.html) da
 <p align="center"> The loss plot for training stage 0</p>
 
 <p align="center">
-    <img id="img_losses" src="losses/gan_losses_0.jpg" width="640" name="losses" />
+    <img id="img_losses" src="losses/gan_losses_0.jpeg" width="640" name="losses" />
 </p>
 
 </details>
@@ -96,7 +96,7 @@ The code is tested on [cifar-10](https://www.cs.toronto.edu/~kriz/cifar.html) da
 <p align="center"> The loss plot for training stage 1</p>
 
 <p align="center">
-    <img id="img_losses" src="losses/gan_losses_1.jpg" width="640" name="losses" />
+    <img id="img_losses" src="losses/gan_losses_1.jpeg" width="640" name="losses" />
 </p>
 
 </details>
@@ -107,7 +107,7 @@ The code is tested on [cifar-10](https://www.cs.toronto.edu/~kriz/cifar.html) da
 <p align="center"> The loss plot for training stage 2</p>
 
 <p align="center">
-    <img id="img_losses" src="losses/gan_losses_2.jpg" width="640" name="losses" />
+    <img id="img_losses" src="losses/gan_losses_2.jpeg" width="640" name="losses" />
 </p>
 
 </details>
@@ -118,7 +118,7 @@ The code is tested on [cifar-10](https://www.cs.toronto.edu/~kriz/cifar.html) da
 <p align="center"> The loss plot for training stage 3</p>
 
 <p align="center">
-    <img id="img_losses" src="losses/gan_losses_3.jpg" width="640" name="losses" />
+    <img id="img_losses" src="losses/gan_losses_3.jpeg" width="640" name="losses" />
 </p>
 
 </details>
@@ -195,7 +195,7 @@ $ python3 run.py --show --stage_nums 0 1 2 3
 
 </details>
   
-<details>
+<details open>
 <summary>Stage 3</summary>
 
 <p align="center"> The generated images for training stage 3</p>
