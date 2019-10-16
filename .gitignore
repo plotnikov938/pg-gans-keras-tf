@@ -1,6 +1,7 @@
 # Images ang GIFs
 *.png
 *.gif
+*.jpeg
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
