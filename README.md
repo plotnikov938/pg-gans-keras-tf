@@ -1,8 +1,8 @@
-# Implementation of progressive groving of GANs with Keras + tensorflow (tpu support)
+# Implementation of progressive growing of GANs with Keras + tensorflow (tpu support)
 
-This repository contains the partial implementation of [progressive groving of GANs](https://arxiv.org/abs/1710.10196).
+This repository contains the partial implementation of [progressive growing of GANs](https://arxiv.org/abs/1710.10196).
 The code supports different type of GAN objective functions (for more information see [adversarials.py](adversarials.py)), 
-historical buffer, mixup and training using [Google Colab TPU](https://cloud.google.com/tpu/). 
+historical buffer, mixup and training on [Google Colab TPU](https://cloud.google.com/tpu/). 
 The implementation could be used for tasks of image generation, style transfer 
 and even [improving the accuracy](https://arxiv.org/abs/1811.12231) of the image classifier.
 
@@ -10,8 +10,8 @@ The code is tested on [cifar-10](https://www.cs.toronto.edu/~kriz/cifar.html) da
 
 ---
 This project is the part of the datascience portfolio. Other projects can be found here:
-* [Implementation of PPO algorithm for reinforcement learning with Keras + tensorflow](https://github.com/plotnikov938/ppo_keras_tf)
-* [Text classification using CapsNet and multihead relative attention with Keras + tensorflow](https://github.com/plotnikov938/txt_class_keras_tf)
+* [Implementation of PPO algorithm for reinforcement learning with Keras + tensorflow](https://github.com/plotnikov938/ppo-keras-tf)
+* [Text classification using CapsNet and multihead relative attention with Keras + tensorflow](https://github.com/plotnikov938/txt-class-keras-tf)
 ---
 
 ## Table of Contents
@@ -44,11 +44,11 @@ Make sure you use Python 3.
 
 Clone this repo to your local machine
 ```
-$ git clone https://github.com/plotnikov938/pg_gans_keras_tf.git
+$ git clone https://github.com/plotnikov938/pg-gans-keras-tf.git
 ```
 Go into the project directory
 ```
-$ cd pg_gan_keras_tf/
+$ cd pg-gans-keras-tf/
 ```
 Create a virtual environment if needed:
 ```
@@ -213,4 +213,4 @@ $ python3 run.py --show --stage_nums 0 1 2 3
 4. [Learning from Simulated and Unsupervised Images through Adversarial Training](https://arxiv.org/pdf/1612.07828.pdf)
 
 ## Contacts
-Please contact me if you have any questions:  [plotnikov.ilia938@gmail.com](mailto:plotnikov.ilia938@gmail.com)
+Please feel free to contact me if you have any questions:  [plotnikov.ilia938@gmail.com](mailto:plotnikov.ilia938@gmail.com)
